@@ -4,6 +4,15 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.1.1] — 2026-04-30
+
+### Changed
+- **README polish.** Lead with both install paths (PyPI + VS Code Marketplace), add status badges, expand the Quickstart with `guard sql` and `guard api` examples, document opt-in `--execute` mode for SQL and HTTP, and update the Pipeline section to list the DB_* / API_* intents and secret scanning that were already shipped in 0.1.0 but undocumented in the README.
+- New "Adapters" table making the analyze-only-by-default behaviour explicit.
+- New "Release flow" section documenting the auto-publish-on-tag CI.
+
+No code changes.
+
 ## [0.1.0] — 2026-04-30
 
 First public release. Available on PyPI as
