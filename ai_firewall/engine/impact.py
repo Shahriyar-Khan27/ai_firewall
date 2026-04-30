@@ -6,7 +6,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ai_firewall.core.action import Action, IntentType
-from ai_firewall.engine import code_analysis, diff as diff_mod, git_check, sql_analysis, url_analysis
+from ai_firewall.engine import (
+    code_analysis,
+    diff as diff_mod,
+    git_check,
+    secret_scan,
+    sql_analysis,
+    url_analysis,
+)
 
 _POSIX_SHLEX = os.name != "nt"
 
@@ -84,12 +91,24 @@ def _api_impact(action: Action) -> Impact:
         notes = "URL did not parse"
     body = action.payload.get("body") or ""
     bytes_affected = len(body.encode("utf-8")) if isinstance(body, str) else 0
+
+    # Scan body and Authorization-style headers for leaked secrets.
+    findings = list(a.findings)
+    headers = action.payload.get("headers") or {}
+    auth_header_text = "\n".join(
+        f"{k}: {v}" for k, v in headers.items() if k.lower() in {"authorization", "x-api-key", "x-auth-token"}
+    )
+    scan_target = "\n".join(filter(None, [body if isinstance(body, str) else "", auth_header_text]))
+    if scan_target:
+        sec = secret_scan.scan(scan_target)
+        findings.extend(sec.findings)
+
     return Impact(
         files_affected=0,
         bytes_affected=bytes_affected,
         paths=(a.host,) if a.host else (),
         notes=notes,
-        code_findings=a.findings,
+        code_findings=tuple(findings),
     )
 
 

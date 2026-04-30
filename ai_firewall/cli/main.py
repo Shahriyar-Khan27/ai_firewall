@@ -127,7 +127,8 @@ def sql(
 def api(
     method: str = typer.Argument(..., help="HTTP method: GET, POST, PUT, PATCH, DELETE, ..."),
     url: str = typer.Argument(..., help="Target URL."),
-    body: Optional[str] = typer.Option(None, "--body", help="Optional request body."),
+    body: Optional[str] = typer.Option(None, "--body", help="Optional request body (scanned for leaked secrets)."),
+    header: Optional[list[str]] = typer.Option(None, "--header", "-H", help="Request header in `Name: value` form. Repeat for multiple."),
     rules: Optional[Path] = typer.Option(None, "--rules"),
     audit: Optional[Path] = typer.Option(None, "--audit"),
     auto_approve_flag: bool = typer.Option(False, "--auto-approve"),
@@ -135,7 +136,12 @@ def api(
     evaluate_only: bool = typer.Option(False, "--evaluate-only", help="Print Decision JSON; do not record an audit row."),
 ):
     """Evaluate an HTTP request through the firewall (analyze-only — never makes the request)."""
-    action = Action.api(method, url, body=body)
+    headers: dict[str, str] = {}
+    for raw in header or []:
+        if ":" in raw:
+            k, _, v = raw.partition(":")
+            headers[k.strip()] = v.strip()
+    action = Action.api(method, url, body=body, headers=headers or None)
     if evaluate_only:
         guard = Guard(rules_path=rules, audit_path=Path("logs/audit.jsonl"))
         decision = guard.evaluate(action)

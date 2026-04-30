@@ -84,3 +84,39 @@ def test_audit_records_api_action(tmp_path: Path):
     assert rec["intent"] == "API_READ"
     assert rec["rendered"] == "GET https://api.example.com/users"
     assert rec["executed"] is False
+
+
+def test_post_with_aws_key_in_body_critical(tmp_path: Path):
+    body = '{"data": "...", "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE"}'
+    decision = _evaluate(Action.api("POST", "https://api.example.com/log", body=body), tmp_path)
+    assert decision.risk == RiskLevel.CRITICAL
+    assert any("AWS access key id" in f for f in decision.impact.code_findings)
+
+
+def test_post_with_github_token_in_authorization_header_critical(tmp_path: Path):
+    headers = {"Authorization": "Bearer ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+    decision = _evaluate(
+        Action.api("POST", "https://api.example.com/things", body="{}", headers=headers),
+        tmp_path,
+    )
+    assert decision.risk == RiskLevel.CRITICAL
+    assert any("GitHub PAT" in f for f in decision.impact.code_findings)
+
+
+def test_post_with_jwt_only_high_not_critical(tmp_path: Path):
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature_part_here_long_enough"
+    decision = _evaluate(
+        Action.api("POST", "https://api.example.com/x", body=f'{{"token":"{jwt}"}}'),
+        tmp_path,
+    )
+    # JWTs are only "major" severity → bumps risk to HIGH but not CRITICAL.
+    assert decision.risk == RiskLevel.HIGH
+
+
+def test_safe_post_body_stays_baseline(tmp_path: Path):
+    decision = _evaluate(
+        Action.api("POST", "https://api.example.com/log", body='{"event":"login","user_id":123}'),
+        tmp_path,
+    )
+    # No secrets → baseline POST risk is MEDIUM, which still requires approval per default rules.
+    assert decision.risk == RiskLevel.MEDIUM

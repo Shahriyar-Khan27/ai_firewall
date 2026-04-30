@@ -86,6 +86,7 @@ def apply_impact(base: RiskLevel, impact: Impact) -> RiskLevel:
             "secrets in query string",
             "non-HTTP scheme",
             "destructive-sounding URL path",
+            "possible secret in payload",
         )
         critical_signals = (
             "DROP DATABASE",
@@ -93,6 +94,7 @@ def apply_impact(base: RiskLevel, impact: Impact) -> RiskLevel:
             "DELETE without WHERE",
             "UPDATE without WHERE",
             "cloud metadata endpoint",
+            "high-confidence secret leak",
         )
         for finding in impact.code_findings:
             if any(sig in finding for sig in critical_signals):
