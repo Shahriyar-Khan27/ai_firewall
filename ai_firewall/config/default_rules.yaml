@@ -56,3 +56,16 @@ db_destructive:
     - 'DROP\s+DATABASE'
     - 'DROP\s+SCHEMA'
   require_approval: true
+
+api_read:
+  # GET/HEAD/OPTIONS — generally allowed; risk bumps via impact handle SSRF/metadata.
+  require_approval:
+    risk_at_or_above: HIGH
+
+api_write:
+  require_approval:
+    risk_at_or_above: MEDIUM
+
+api_destructive:
+  # DELETE — always confirm, even to "safe" hosts.
+  require_approval: true

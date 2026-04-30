@@ -112,3 +112,34 @@ def test_sql_auto_approve_executes_analyze_only(tmp_path: Path):
     rec = json.loads(audit.read_text(encoding="utf-8").strip())
     assert rec["intent"] == "DB_DESTRUCTIVE"
     assert rec["executed"] is False
+
+
+def test_api_evaluate_only_outputs_decision():
+    result = runner.invoke(cli, ["api", "GET", "https://api.example.com/users", "--evaluate-only"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["intent"] == "API_READ"
+    assert payload["decision"] == "ALLOW"
+
+
+def test_api_metadata_endpoint_high_severity():
+    result = runner.invoke(
+        cli, ["api", "GET", "http://169.254.169.254/latest/meta-data/", "--evaluate-only"]
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["risk"] == "CRITICAL"
+    assert payload["decision"] == "REQUIRE_APPROVAL"
+
+
+def test_api_auto_approve_executes_analyze_only(tmp_path: Path):
+    audit = tmp_path / "audit.jsonl"
+    result = runner.invoke(
+        cli,
+        ["api", "DELETE", "https://api.example.com/users/42", "--auto-approve", "--audit", str(audit)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "approved (analyze-only)" in result.output
+    rec = json.loads(audit.read_text(encoding="utf-8").strip())
+    assert rec["intent"] == "API_DESTRUCTIVE"
+    assert rec["executed"] is False

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ai_firewall.adapters.api import APIAnalyzeAdapter
 from ai_firewall.adapters.base import ExecutionAdapter, ExecutionResult
 from ai_firewall.adapters.db import DBAnalyzeAdapter
 from ai_firewall.adapters.file import FileAdapter
@@ -50,6 +51,7 @@ class Guard:
             "shell": ShellAdapter(),
             "file": FileAdapter(),
             "db": DBAnalyzeAdapter(),
+            "api": APIAnalyzeAdapter(),
         }
 
     def evaluate(self, action: Action) -> Decision:

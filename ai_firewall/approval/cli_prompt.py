@@ -92,4 +92,6 @@ def _render(action: Action) -> str:
         return f"{action.payload.get('op', '')} {action.payload.get('path', '')}".strip()
     if action.type == "db":
         return str(action.payload.get("sql", ""))
+    if action.type == "api":
+        return f"{action.payload.get('method', 'GET')} {action.payload.get('url', '')}".strip()
     return ""

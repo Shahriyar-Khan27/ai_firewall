@@ -47,6 +47,13 @@ def score(action: Action, intent: IntentType, flags: dict[str, bool] | None = No
     if intent is IntentType.DB_DESTRUCTIVE:
         return RiskLevel.HIGH
 
+    if intent is IntentType.API_READ:
+        return RiskLevel.LOW
+    if intent is IntentType.API_WRITE:
+        return RiskLevel.MEDIUM
+    if intent is IntentType.API_DESTRUCTIVE:
+        return RiskLevel.HIGH
+
     return RiskLevel.MEDIUM
 
 
@@ -73,12 +80,19 @@ def apply_impact(base: RiskLevel, impact: Impact) -> RiskLevel:
             "irreversible schema change",
             "privilege change",
             "multiple statements",
+            # URL / API signals:
+            "private/loopback",
+            "credentials in userinfo",
+            "secrets in query string",
+            "non-HTTP scheme",
+            "destructive-sounding URL path",
         )
         critical_signals = (
             "DROP DATABASE",
             "DROP SCHEMA",
             "DELETE without WHERE",
             "UPDATE without WHERE",
+            "cloud metadata endpoint",
         )
         for finding in impact.code_findings:
             if any(sig in finding for sig in critical_signals):

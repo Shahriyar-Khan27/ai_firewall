@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ai_firewall.core.action import Action, IntentType
-from ai_firewall.engine import code_analysis, diff as diff_mod, git_check, sql_analysis
+from ai_firewall.engine import code_analysis, diff as diff_mod, git_check, sql_analysis, url_analysis
 
 _POSIX_SHLEX = os.name != "nt"
 
@@ -68,7 +68,29 @@ def estimate(action: Action, intent: IntentType, *, base_cwd: Path | None = None
     if intent in (IntentType.DB_READ, IntentType.DB_WRITE, IntentType.DB_DESTRUCTIVE):
         return _db_impact(action)
 
+    if intent in (IntentType.API_READ, IntentType.API_WRITE, IntentType.API_DESTRUCTIVE):
+        return _api_impact(action)
+
     return Impact(notes="impact not modelled for this intent")
+
+
+def _api_impact(action: Action) -> Impact:
+    method = action.payload.get("method") or "GET"
+    url = action.payload.get("url") or ""
+    a = url_analysis.analyze(method, url)
+    if a.parse_ok:
+        notes = f"{a.method} {a.scheme}://{a.host}{a.path or ''}".rstrip()
+    else:
+        notes = "URL did not parse"
+    body = action.payload.get("body") or ""
+    bytes_affected = len(body.encode("utf-8")) if isinstance(body, str) else 0
+    return Impact(
+        files_affected=0,
+        bytes_affected=bytes_affected,
+        paths=(a.host,) if a.host else (),
+        notes=notes,
+        code_findings=a.findings,
+    )
 
 
 def _db_impact(action: Action) -> Impact:

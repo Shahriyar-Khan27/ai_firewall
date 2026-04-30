@@ -94,4 +94,6 @@ class PolicyEngine:
             return f"{op} {path}"
         if action.type == "db":
             return str(action.payload.get("sql", ""))
+        if action.type == "api":
+            return f"{action.payload.get('method', 'GET')} {action.payload.get('url', '')}".strip()
         return ""

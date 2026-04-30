@@ -37,6 +37,17 @@ def classify(action: Action) -> IntentType:
             return IntentType.DB_DESTRUCTIVE
         return IntentType.UNKNOWN
 
+    if action.type == "api":
+        from ai_firewall.engine import url_analysis
+        primary = url_analysis.primary_intent(action.payload.get("method") or "GET")
+        if primary == "API_READ":
+            return IntentType.API_READ
+        if primary == "API_WRITE":
+            return IntentType.API_WRITE
+        if primary == "API_DESTRUCTIVE":
+            return IntentType.API_DESTRUCTIVE
+        return IntentType.UNKNOWN
+
     if action.type == "file":
         op = (action.payload.get("op") or "").lower()
         path = action.payload.get("path") or ""

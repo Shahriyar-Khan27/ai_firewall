@@ -123,6 +123,35 @@ def sql(
     raise typer.Exit(code=result.execution.exit_code)
 
 
+@cli.command()
+def api(
+    method: str = typer.Argument(..., help="HTTP method: GET, POST, PUT, PATCH, DELETE, ..."),
+    url: str = typer.Argument(..., help="Target URL."),
+    body: Optional[str] = typer.Option(None, "--body", help="Optional request body."),
+    rules: Optional[Path] = typer.Option(None, "--rules"),
+    audit: Optional[Path] = typer.Option(None, "--audit"),
+    auto_approve_flag: bool = typer.Option(False, "--auto-approve"),
+    auto_deny_flag: bool = typer.Option(False, "--auto-deny"),
+    evaluate_only: bool = typer.Option(False, "--evaluate-only", help="Print Decision JSON; do not record an audit row."),
+):
+    """Evaluate an HTTP request through the firewall (analyze-only — never makes the request)."""
+    action = Action.api(method, url, body=body)
+    if evaluate_only:
+        guard = Guard(rules_path=rules, audit_path=Path("logs/audit.jsonl"))
+        decision = guard.evaluate(action)
+        typer.echo(json.dumps(decision.to_dict(), indent=2))
+        return
+    guard = _make_guard(rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag)
+    try:
+        result = guard.execute(action)
+    except Blocked as exc:
+        typer.secho(f"[FIREWALL] {exc.decision.decision}: {exc.decision.reason}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=126)
+    sys.stdout.write(result.execution.stdout)
+    sys.stderr.write(result.execution.stderr)
+    raise typer.Exit(code=result.execution.exit_code)
+
+
 @policy_app.command("show")
 def policy_show(rules: Optional[Path] = typer.Option(None, "--rules")):
     """Print the effective ruleset as YAML."""

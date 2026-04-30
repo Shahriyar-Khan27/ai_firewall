@@ -16,6 +16,9 @@ class IntentType(StrEnum):
     DB_READ = "DB_READ"
     DB_WRITE = "DB_WRITE"
     DB_DESTRUCTIVE = "DB_DESTRUCTIVE"
+    API_READ = "API_READ"
+    API_WRITE = "API_WRITE"
+    API_DESTRUCTIVE = "API_DESTRUCTIVE"
     UNKNOWN = "UNKNOWN"
 
 
@@ -65,3 +68,18 @@ class Action:
             payload={"sql": sql, "dialect": dialect},
             context={"cwd": os.getcwd()},
         )
+
+    @staticmethod
+    def api(
+        method: str,
+        url: str,
+        *,
+        body: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> "Action":
+        payload: dict[str, Any] = {"method": (method or "GET").upper(), "url": url}
+        if body is not None:
+            payload["body"] = body
+        if headers:
+            payload["headers"] = dict(headers)
+        return Action(type="api", payload=payload, context={"cwd": os.getcwd()})
