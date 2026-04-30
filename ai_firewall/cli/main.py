@@ -8,11 +8,22 @@ from typing import Optional
 import typer
 import yaml
 
+from ai_firewall.adapters.api_execute import HTTPExecuteAdapter
 from ai_firewall.adapters.db_execute import SQLiteExecuteAdapter
 from ai_firewall.approval.cli_prompt import auto_approve, auto_deny, prompt_user
 from ai_firewall.core.action import Action
 from ai_firewall.core.guard import Blocked, Guard
 from ai_firewall.parser.action_parser import parse_argv, parse_shell_string
+
+# On Windows the default stdout encoding is cp1252, which can't render arrows,
+# bullets, or non-Latin row content from query/response output. Force UTF-8 with
+# replace-errors so guard never crashes mid-write on non-ASCII.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
 
 cli = typer.Typer(help="AI Execution Firewall — gate AI-generated actions before they run.", no_args_is_help=True)
 policy_app = typer.Typer(help="Inspect or validate policy rule files.", no_args_is_help=True)
@@ -152,8 +163,14 @@ def api(
     auto_approve_flag: bool = typer.Option(False, "--auto-approve"),
     auto_deny_flag: bool = typer.Option(False, "--auto-deny"),
     evaluate_only: bool = typer.Option(False, "--evaluate-only", help="Print Decision JSON; do not record an audit row."),
+    execute: bool = typer.Option(False, "--execute", help="Actually issue the HTTP request via urllib if approved (default: analyze-only)."),
+    timeout: float = typer.Option(15.0, "--timeout", help="Per-request timeout in seconds when --execute is set."),
 ):
-    """Evaluate an HTTP request through the firewall (analyze-only — never makes the request)."""
+    """Evaluate an HTTP request through the firewall.
+
+    Default: analyze-only — firewall never makes the request.
+    With `--execute`: issues the request via urllib once policy approves.
+    """
     headers: dict[str, str] = {}
     for raw in header or []:
         if ":" in raw:
@@ -166,6 +183,8 @@ def api(
         typer.echo(json.dumps(decision.to_dict(), indent=2))
         return
     guard = _make_guard(rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag)
+    if execute:
+        guard.adapters["api"] = HTTPExecuteAdapter(timeout=timeout)
     try:
         result = guard.execute(action)
     except Blocked as exc:

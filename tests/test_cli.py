@@ -172,3 +172,21 @@ def test_sql_execute_runs_against_sqlite(tmp_path: Path):
     rec = json.loads(audit.read_text(encoding="utf-8").strip())
     assert rec["executed"] is True
     assert rec["exit_code"] == 0
+
+
+def test_api_execute_with_auto_deny_does_not_send_request(tmp_path: Path):
+    audit = tmp_path / "audit.jsonl"
+    # CRITICAL metadata host → REQUIRE_APPROVAL → auto-deny → blocked.
+    # No real request goes out (auto-deny short-circuits before the adapter runs).
+    result = runner.invoke(
+        cli,
+        [
+            "api", "GET", "http://169.254.169.254/latest/meta-data/",
+            "--execute", "--auto-deny", "--audit", str(audit),
+        ],
+    )
+    assert result.exit_code == 126
+    rec = json.loads(audit.read_text(encoding="utf-8").strip())
+    assert rec["intent"] == "API_READ"
+    assert rec["risk"] == "CRITICAL"
+    assert rec["executed"] is False  # rejected before the adapter could fire
