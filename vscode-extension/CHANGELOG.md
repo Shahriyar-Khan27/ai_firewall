@@ -2,6 +2,11 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.2.1] — 2026-04-30
+
+### Changed
+- Refreshed README to lead with Marketplace install (rather than build-from-source), add badges, and document all six commands and the full demo flow (shell + SQL + HTTP). The 0.2.0 listing shipped with the older "build from source" README; this version updates the public Marketplace page.
+
 ## [0.2.0] — 2026-04-30
 
 ### Added
