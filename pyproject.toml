@@ -59,7 +59,7 @@ guard = "ai_firewall.cli.main:cli"
 Homepage = "https://github.com/Shahriyar-Khan27/ai_firewall"
 Repository = "https://github.com/Shahriyar-Khan27/ai_firewall"
 Issues = "https://github.com/Shahriyar-Khan27/ai_firewall/issues"
-Changelog = "https://github.com/Shahriyar-Khan27/ai_firewall/commits/main"
+Changelog = "https://github.com/Shahriyar-Khan27/ai_firewall/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["ai_firewall*"]
