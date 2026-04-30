@@ -1,0 +1,58 @@
+# AI Execution Firewall — default policy rules.
+# Sections are keyed by IntentType (lowercased). Each section may define:
+#   blocked:           list of regex patterns matched against the rendered command/path
+#   blocked_paths:     list of glob patterns matched against the action's path
+#   require_approval:  true | false | { risk_at_or_above: LOW|MEDIUM|HIGH|CRITICAL }
+#   allowed:           list of regex patterns that override blocked/approval
+
+shell_exec:
+  blocked:
+    - 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f?\s+/(\s|$)'
+    - 'rm\s+-[a-zA-Z]*f[a-zA-Z]*r?\s+/(\s|$)'
+    - 'sudo\s+rm\s+-r'
+    - ':\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:'
+    - 'mkfs(\.|\s)'
+    - 'dd\s+if=.*of=/dev/'
+    - '>\s*/dev/sd[a-z]'
+  require_approval:
+    risk_at_or_above: HIGH
+
+file_delete:
+  require_approval: true
+  blocked:
+    - '^/$'
+
+file_write:
+  blocked_paths:
+    - '/etc/**'
+    - '/usr/**'
+    - '/boot/**'
+    - 'C:/Windows/**'
+    - 'C:/Program Files/**'
+  require_approval:
+    risk_at_or_above: HIGH
+
+code_modify:
+  require_approval:
+    risk_at_or_above: MEDIUM
+
+file_read:
+  blocked_paths:
+    - '/etc/shadow'
+    - '/etc/sudoers'
+
+shell_read:
+  # placeholder — keeps the schema extensible
+
+db_read:
+  # SELECT/SHOW/DESCRIBE — generally allowed without prompting.
+
+db_write:
+  require_approval:
+    risk_at_or_above: HIGH
+
+db_destructive:
+  blocked:
+    - 'DROP\s+DATABASE'
+    - 'DROP\s+SCHEMA'
+  require_approval: true

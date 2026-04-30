@@ -1,0 +1,66 @@
+{
+  "name": "ai-execution-firewall",
+  "displayName": "AI Execution Firewall",
+  "description": "In-editor approval UI for the AI Execution Firewall — gate AI-generated shell commands before they run.",
+  "version": "0.1.0",
+  "publisher": "ai-firewall",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiFirewall.runCommand",
+        "title": "AI Firewall: Run Shell Command…",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.evaluateSelection",
+        "title": "AI Firewall: Evaluate Selected Text",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.showPolicy",
+        "title": "AI Firewall: Show Effective Policy",
+        "category": "AI Firewall"
+      }
+    ],
+    "configuration": {
+      "title": "AI Execution Firewall",
+      "properties": {
+        "aiFirewall.guardPath": {
+          "type": "string",
+          "default": "guard",
+          "description": "Path to the `guard` CLI. Leave as `guard` if it's on PATH; set to an absolute path otherwise (e.g. C:/path/to/.venv/Scripts/guard.exe)."
+        },
+        "aiFirewall.rulesPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a custom rules YAML file. Empty = use shipped defaults."
+        },
+        "aiFirewall.auditPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to the audit JSONL log. Empty = guard default (./logs/audit.jsonl)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

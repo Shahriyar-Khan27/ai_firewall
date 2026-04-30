@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtual environments ---
+.venv/
+.venv-*/
+venv/
+env/
+ENV/
+
+# --- VS Code extension build artifacts ---
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix
+vscode-extension/.vscode-test/
+
+# --- Editor / OS ---
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Runtime artifacts ---
+# Audit logs are runtime data, not source.
+logs/
+
+# --- Local secrets / overrides ---
+.env
+.env.*
+local_rules.yaml
