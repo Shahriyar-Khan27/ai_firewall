@@ -1,14 +1,22 @@
 # AI Execution Firewall
 
-A control layer that intercepts AI-generated actions (shell commands, file ops) and gates them through a deterministic policy pipeline before they execute.
+A control layer that intercepts AI-generated actions (shell commands, file ops, SQL queries, HTTP requests) and gates them through a deterministic policy pipeline before they execute.
 
 ```
 AI → Action → Firewall → Decision → Execution
 ```
 
-## Install (editable)
+## Install
 
 ```bash
+pip install ai-execution-firewall
+```
+
+For development (editable install with test deps):
+
+```bash
+git clone https://github.com/Shahriyar-Khan27/ai_firewall.git
+cd ai_firewall
 pip install -e ".[dev]"
 ```
 
