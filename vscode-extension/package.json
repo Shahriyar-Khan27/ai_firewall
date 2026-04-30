@@ -18,17 +18,32 @@
     "commands": [
       {
         "command": "aiFirewall.runCommand",
-        "title": "AI Firewall: Run Shell Command…",
+        "title": "Run Shell Command…",
         "category": "AI Firewall"
       },
       {
         "command": "aiFirewall.evaluateSelection",
-        "title": "AI Firewall: Evaluate Selected Text",
+        "title": "Evaluate Selected Text as Shell Command",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.evaluateSql",
+        "title": "Evaluate SQL Query…",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.evaluateSqlSelection",
+        "title": "Evaluate Selected Text as SQL",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.evaluateApi",
+        "title": "Evaluate HTTP Request…",
         "category": "AI Firewall"
       },
       {
         "command": "aiFirewall.showPolicy",
-        "title": "AI Firewall: Show Effective Policy",
+        "title": "Show Effective Policy",
         "category": "AI Firewall"
       }
     ],
