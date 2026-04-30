@@ -143,3 +143,32 @@ def test_api_auto_approve_executes_analyze_only(tmp_path: Path):
     rec = json.loads(audit.read_text(encoding="utf-8").strip())
     assert rec["intent"] == "API_DESTRUCTIVE"
     assert rec["executed"] is False
+
+
+def test_sql_execute_requires_connection():
+    result = runner.invoke(cli, ["sql", "SELECT 1", "--execute", "--auto-approve"])
+    assert result.exit_code == 2
+
+
+def test_sql_execute_runs_against_sqlite(tmp_path: Path):
+    import sqlite3
+    db = tmp_path / "demo.sqlite"
+    conn = sqlite3.connect(db)
+    conn.executescript("CREATE TABLE t(x INTEGER); INSERT INTO t VALUES (1), (2);")
+    conn.commit()
+    conn.close()
+    audit = tmp_path / "audit.jsonl"
+
+    result = runner.invoke(
+        cli,
+        [
+            "sql", "SELECT x FROM t ORDER BY x",
+            "--execute", "--connection", str(db),
+            "--auto-approve", "--audit", str(audit),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "x\n1\n2" in result.output
+    rec = json.loads(audit.read_text(encoding="utf-8").strip())
+    assert rec["executed"] is True
+    assert rec["exit_code"] == 0

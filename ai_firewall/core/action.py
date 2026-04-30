@@ -62,11 +62,14 @@ class Action:
         return Action(type="file", payload=payload, context={"cwd": os.getcwd()})
 
     @staticmethod
-    def db(sql: str, *, dialect: str = "generic") -> "Action":
+    def db(sql: str, *, dialect: str = "generic", connection: str | None = None) -> "Action":
+        ctx: dict[str, Any] = {"cwd": os.getcwd()}
+        if connection:
+            ctx["connection"] = connection
         return Action(
             type="db",
             payload={"sql": sql, "dialect": dialect},
-            context={"cwd": os.getcwd()},
+            context=ctx,
         )
 
     @staticmethod

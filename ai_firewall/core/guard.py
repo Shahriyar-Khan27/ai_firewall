@@ -47,12 +47,18 @@ class Guard:
         )
         self.audit = AuditLogger(Path(audit_path) if audit_path else Path("logs/audit.jsonl"))
         self.approval_fn = approval_fn
-        self.adapters: dict[str, ExecutionAdapter] = adapters or {
+        # Defaults are analyze-only for db/api so the firewall never executes
+        # anything dangerous unless the caller opts in by passing a custom
+        # adapter (e.g. SQLiteExecuteAdapter via `guard sql --execute`).
+        defaults: dict[str, ExecutionAdapter] = {
             "shell": ShellAdapter(),
             "file": FileAdapter(),
             "db": DBAnalyzeAdapter(),
             "api": APIAnalyzeAdapter(),
         }
+        if adapters:
+            defaults.update(adapters)
+        self.adapters: dict[str, ExecutionAdapter] = defaults
 
     def evaluate(self, action: Action) -> Decision:
         intent = intent_mod.classify(action)

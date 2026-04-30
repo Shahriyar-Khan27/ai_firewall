@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 import yaml
 
+from ai_firewall.adapters.db_execute import SQLiteExecuteAdapter
 from ai_firewall.approval.cli_prompt import auto_approve, auto_deny, prompt_user
 from ai_firewall.core.action import Action
 from ai_firewall.core.guard import Blocked, Guard
@@ -104,15 +105,32 @@ def sql(
     auto_approve_flag: bool = typer.Option(False, "--auto-approve"),
     auto_deny_flag: bool = typer.Option(False, "--auto-deny"),
     evaluate_only: bool = typer.Option(False, "--evaluate-only", help="Print Decision JSON; do not record an audit row."),
+    execute: bool = typer.Option(False, "--execute", help="Run the query against --connection if approved (SQLite only)."),
+    connection: Optional[str] = typer.Option(None, "--connection", help="SQLite connection (path, sqlite:///path, or :memory:)."),
 ):
-    """Evaluate a SQL query through the firewall (analyze-only — never executes)."""
-    action = Action.db(query, dialect=dialect)
+    """Evaluate a SQL query through the firewall.
+
+    Default: analyze-only — firewall never touches a DB.
+    With `--execute --connection <sqlite-path>`: runs the approved query.
+    """
+    if execute and not connection:
+        typer.secho("--execute requires --connection", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+
+    action = Action.db(query, dialect=dialect, connection=connection if execute else None)
+
     if evaluate_only:
         guard = Guard(rules_path=rules, audit_path=Path("logs/audit.jsonl"))
         decision = guard.evaluate(action)
         typer.echo(json.dumps(decision.to_dict(), indent=2))
         return
-    guard = _make_guard(rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag)
+
+    custom_adapters = {"db": SQLiteExecuteAdapter(connection)} if execute else None
+    guard = _make_guard(
+        rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag
+    )
+    if custom_adapters:
+        guard.adapters.update(custom_adapters)
     try:
         result = guard.execute(action)
     except Blocked as exc:
