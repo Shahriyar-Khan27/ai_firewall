@@ -1,9 +1,14 @@
 {
   "name": "ai-execution-firewall",
   "displayName": "AI Execution Firewall",
-  "description": "In-editor approval UI for the AI Execution Firewall — gate AI-generated shell commands before they run.",
+  "description": "In-editor approval UI for the AI Execution Firewall — gate AI-generated shell commands, file edits, SQL queries, and HTTP requests before they execute.",
   "version": "0.1.0",
   "publisher": "ai-firewall",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Shahriyar-Khan27/ai_firewall.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -76,6 +81,7 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.4.0"
   }
 }

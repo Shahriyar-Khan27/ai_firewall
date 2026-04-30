@@ -62,3 +62,16 @@ If `guard` isn't on PATH, set `aiFirewall.guardPath` to the absolute path, e.g.
 - **`src/extension.ts`** — registers commands, drives the eval → approve → run flow, streams output to the "AI Firewall" output channel.
 
 The extension never re-implements policy logic — it only surfaces what the Python firewall returns.
+
+## Build a `.vsix` for distribution
+
+To produce an installable `.vsix` (e.g. to email or share without going through the Marketplace):
+
+```bash
+npm install      # ensure devDependencies including @vscode/vsce
+npx vsce package --no-yarn
+```
+
+This produces `ai-execution-firewall-<version>.vsix` in this folder (gitignored). To install it on another VS Code:
+
+> Extensions panel → `…` overflow menu → **Install from VSIX…** → pick the file
