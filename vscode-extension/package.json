@@ -1,19 +1,44 @@
 {
   "name": "ai-execution-firewall",
   "displayName": "AI Execution Firewall",
-  "description": "In-editor approval UI for the AI Execution Firewall — gate AI-generated shell commands, file edits, SQL queries, and HTTP requests before they execute.",
-  "version": "0.1.0",
-  "publisher": "ai-firewall",
+  "description": "Gate AI-generated shell commands, file edits, SQL queries, and HTTP requests before they execute. Deterministic policy + risk + impact analysis with an in-editor approval UI.",
+  "version": "0.2.0",
+  "publisher": "sk-dev-ai",
   "license": "MIT",
+  "icon": "icon.png",
+  "homepage": "https://github.com/Shahriyar-Khan27/ai_firewall#readme",
+  "bugs": {
+    "url": "https://github.com/Shahriyar-Khan27/ai_firewall/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Shahriyar-Khan27/ai_firewall.git"
   },
+  "galleryBanner": {
+    "color": "#0f172a",
+    "theme": "dark"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "safety",
+    "firewall",
+    "guardrails",
+    "policy",
+    "security",
+    "audit",
+    "sql",
+    "http",
+    "approval",
+    "llm"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Linters",
+    "Testing"
   ],
   "main": "./out/extension.js",
   "activationEvents": [
