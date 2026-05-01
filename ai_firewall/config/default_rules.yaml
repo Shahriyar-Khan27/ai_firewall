@@ -98,3 +98,27 @@ governance:
     # Best-effort API "spend" cap, proxied by request-body bytes per 24h.
     # Comment out to disable; set high (e.g. 100_000_000) for noisy projects.
     api_bytes_per_day: 100_000_000
+
+behavior:
+  # Rule-based anomaly detection. An anomaly *downgrades* an ALLOW into
+  # REQUIRE_APPROVAL — it never escalates BLOCK or auto-approves. Disable
+  # per-Guard with `enable_behavior=False`.
+  enabled: true
+
+  # Per-intent count thresholds within `burst_window_seconds`.
+  rate_burst:
+    file_delete: 25
+    db_destructive: 10
+    api_destructive: 10
+  burst_window_seconds: 60
+
+  # Last-hour rate vs 24h median: flags if last hour > Nx baseline.
+  rate_multiplier_threshold: 5.0
+  spike_min_baseline_hours: 6
+
+  # Quiet-hour detection only fires after this much overall history AND
+  # only when the log spans this many distinct hours-of-day. The second
+  # check guards against sparse-history false positives (e.g. a 2-hour
+  # burst of activity makes the other 22 hours falsely look "quiet").
+  quiet_hour_min_total_actions: 100
+  quiet_hour_min_distinct_hours: 12

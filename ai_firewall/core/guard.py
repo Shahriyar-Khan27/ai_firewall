@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,13 +13,16 @@ from ai_firewall.approval.cli_prompt import ApprovalFn, prompt_user
 from ai_firewall.approval.pattern_memory import PatternMemory
 from ai_firewall.audit.logger import AuditLogger
 from ai_firewall.core.action import Action
+from ai_firewall.config import guard_toml as guard_toml_mod
 from ai_firewall.engine import governance as gov_mod
 from ai_firewall.engine import impact as impact_mod
 from ai_firewall.engine import intent as intent_mod
 from ai_firewall.engine import risk as risk_mod
+from ai_firewall.engine.behavior import BehaviorConfig, BehaviorEngine
 from ai_firewall.engine.decision import Decision, decide
 from ai_firewall.engine.inheritance import InheritanceMatch, check_inheritance
 from ai_firewall.engine.policy import PolicyEngine
+from ai_firewall.engine.rbac import RBACEngine, resolve_identity
 
 
 class Blocked(Exception):
@@ -50,12 +54,21 @@ class Guard:
         enable_memory: bool = True,
         enable_inheritance: bool = True,
         enable_governance: bool = True,
+        enable_rbac: bool = True,
+        enable_behavior: bool = True,
+        role: str | None = None,
+        guard_toml_path: Path | str | None = None,
         inheritance_window_seconds: float = 300.0,
     ):
         self.policy = (
             PolicyEngine.from_file(Path(rules_path)) if rules_path else PolicyEngine.from_default()
         )
-        self.audit = AuditLogger(Path(audit_path) if audit_path else Path("logs/audit.jsonl"))
+        if audit_path is not None:
+            resolved_audit_path = Path(audit_path)
+        else:
+            env_audit = os.environ.get("AI_FIREWALL_AUDIT_PATH")
+            resolved_audit_path = Path(env_audit) if env_audit else Path("logs/audit.jsonl")
+        self.audit = AuditLogger(resolved_audit_path)
         self.approval_fn = approval_fn
 
         # Defaults are analyze-only for db/api so the firewall never executes
@@ -94,12 +107,41 @@ class Guard:
         self.governance_config = gov_mod.GovernanceConfig.from_rules_dict(self.policy.rules)
         self.governance_counter = gov_mod.RollingCounter(self.audit.path)
 
+        # v0.4.0 RBAC: per-role intent / path / MCP-tool gates loaded from
+        # ~/.ai-firewall/guard.toml (and per-project .guard.toml override).
+        self.enable_rbac = enable_rbac
+        if guard_toml_path is not None:
+            self.guard_toml = guard_toml_mod.load([Path(guard_toml_path)])
+        else:
+            self.guard_toml = guard_toml_mod.load()
+        self.rbac = RBACEngine(self.guard_toml)
+        self.role = resolve_identity(self.guard_toml, cli_role=role)
+
+        # v0.4.0 behavior analytics: rule-based anomaly detection that can
+        # downgrade ALLOW → REQUIRE_APPROVAL. Never escalates BLOCK.
+        self.enable_behavior = enable_behavior
+        self.behavior_config = BehaviorConfig.from_rules_dict(self.policy.rules)
+        self.behavior = BehaviorEngine(self.audit.path, self.behavior_config)
+
     # --- Pipeline ----------------------------------------------------------
 
     def evaluate(self, action: Action) -> Decision:
         intent = intent_mod.classify(action)
         flags = intent_mod.feature_flags(action)
         base_risk = risk_mod.score(action, intent, flags)
+
+        # v0.4.0 RBAC: identity gate. DENY here is final — no smart-flow,
+        # no policy fallback. ALLOW falls through to the normal pipeline.
+        if self.enable_rbac and self.guard_toml.roles:
+            rbac_v = self.rbac.check(action, self.role)
+            if rbac_v.decision == "DENY":
+                return Decision(
+                    decision="BLOCK",
+                    reason=f"rbac: {rbac_v.reason}",
+                    intent=intent,
+                    risk=base_risk,
+                    impact=impact_mod.Impact(notes="not computed (rbac block)"),
+                )
 
         # v0.4.0 governance: rate limit, loop detection, daily API budget.
         # Runs before policy so a runaway loop can't slip through smart-flow.
@@ -134,7 +176,23 @@ class Guard:
         if decision.decision == "REQUIRE_APPROVAL":
             silent = self._maybe_silent_approve(action, decision)
             if silent is not None:
-                return silent
+                decision = silent
+
+        # v0.4.0 behavior analytics: anomaly downgrades ALLOW into
+        # REQUIRE_APPROVAL. Never escalates BLOCK or upgrades approval.
+        if self.enable_behavior and decision.decision == "ALLOW":
+            try:
+                anomaly = self.behavior.detect_anomaly(action)
+            except Exception:
+                anomaly = None
+            if anomaly is not None:
+                decision = Decision(
+                    decision="REQUIRE_APPROVAL",
+                    reason=f"behavior anomaly ({anomaly.rule}): {anomaly.reason}",
+                    intent=decision.intent,
+                    risk=decision.risk,
+                    impact=decision.impact,
+                )
 
         return decision
 

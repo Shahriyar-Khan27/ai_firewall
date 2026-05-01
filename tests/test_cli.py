@@ -9,7 +9,8 @@ runner = CliRunner()
 
 
 def test_eval_outputs_decision_json(tmp_path: Path):
-    result = runner.invoke(cli, ["eval", "echo hello"])
+    audit = tmp_path / "audit.jsonl"
+    result = runner.invoke(cli, ["eval", "echo hello", "--audit", str(audit)])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["decision"] == "ALLOW"
@@ -114,8 +115,12 @@ def test_sql_auto_approve_executes_analyze_only(tmp_path: Path):
     assert rec["executed"] is False
 
 
-def test_api_evaluate_only_outputs_decision():
-    result = runner.invoke(cli, ["api", "GET", "https://api.example.com/users", "--evaluate-only"])
+def test_api_evaluate_only_outputs_decision(tmp_path: Path):
+    audit = tmp_path / "audit.jsonl"
+    result = runner.invoke(
+        cli,
+        ["api", "GET", "https://api.example.com/users", "--evaluate-only", "--audit", str(audit)],
+    )
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["intent"] == "API_READ"

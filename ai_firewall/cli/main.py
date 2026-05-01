@@ -30,9 +30,11 @@ cli = typer.Typer(help="AI Execution Firewall — gate AI-generated actions befo
 policy_app = typer.Typer(help="Inspect or validate policy rule files.", no_args_is_help=True)
 audit_app = typer.Typer(help="Inspect and verify the audit JSONL log.", no_args_is_help=True)
 governance_app = typer.Typer(help="Inspect rate-limit / loop / budget counters.", no_args_is_help=True)
+behavior_app = typer.Typer(help="Inspect behavior-anomaly stats.", no_args_is_help=True)
 cli.add_typer(policy_app, name="policy")
 cli.add_typer(audit_app, name="audit")
 cli.add_typer(governance_app, name="governance")
+cli.add_typer(behavior_app, name="behavior")
 
 
 def _make_guard(
@@ -41,6 +43,7 @@ def _make_guard(
     *,
     auto_approve_flag: bool = False,
     auto_deny_flag: bool = False,
+    role: str | None = None,
 ) -> Guard:
     if auto_approve_flag and auto_deny_flag:
         typer.secho("--auto-approve and --auto-deny are mutually exclusive", fg=typer.colors.RED, err=True)
@@ -55,6 +58,7 @@ def _make_guard(
         rules_path=rules,
         audit_path=audit or Path("logs/audit.jsonl"),
         approval_fn=approval_fn,
+        role=role,
     )
 
 
@@ -67,9 +71,10 @@ def run(
     auto_deny_flag: bool = typer.Option(False, "--auto-deny", help="Skip the interactive prompt; treat REQUIRE_APPROVAL as denied. For dry-run / CI use."),
     dryrun: bool = typer.Option(False, "--dryrun", help="Run the command in a Docker sandbox first; show the file diff instead of touching the real disk."),
     sandbox_image: str = typer.Option("alpine:latest", "--sandbox-image", help="Docker image to use for --dryrun."),
+    role: Optional[str] = typer.Option(None, "--as", help="Run as a specific role from guard.toml (overrides AI_FIREWALL_ROLE and the default_role)."),
 ):
     """Evaluate a shell command and execute it if policy allows."""
-    guard = _make_guard(rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag)
+    guard = _make_guard(rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag, role=role)
     if dryrun:
         from ai_firewall.adapters.sandbox import DockerSandboxAdapter
         guard.adapters["shell"] = DockerSandboxAdapter(image=sandbox_image)
@@ -88,9 +93,10 @@ def run(
 def eval(
     command: str = typer.Argument(..., help="Shell command to evaluate (no execution)."),
     rules: Optional[Path] = typer.Option(None, "--rules"),
+    audit: Optional[Path] = typer.Option(None, "--audit", help="Audit log to read for governance + behavior context."),
 ):
     """Evaluate a command and print the Decision JSON. Does not execute."""
-    guard = Guard(rules_path=rules, audit_path=Path("logs/audit.jsonl"))
+    guard = Guard(rules_path=rules, audit_path=audit or Path("logs/audit.jsonl"))
     action = parse_shell_string(command)
     decision = guard.evaluate(action)
     typer.echo(json.dumps(decision.to_dict(), indent=2))
@@ -183,7 +189,7 @@ def sql(
     action = Action.db(query, dialect=dialect, connection=connection if execute else None)
 
     if evaluate_only:
-        guard = Guard(rules_path=rules, audit_path=Path("logs/audit.jsonl"))
+        guard = Guard(rules_path=rules, audit_path=audit or Path("logs/audit.jsonl"))
         decision = guard.evaluate(action)
         typer.echo(json.dumps(decision.to_dict(), indent=2))
         return
@@ -366,7 +372,7 @@ def api(
             headers[k.strip()] = v.strip()
     action = Action.api(method, url, body=body, headers=headers or None)
     if evaluate_only:
-        guard = Guard(rules_path=rules, audit_path=Path("logs/audit.jsonl"))
+        guard = Guard(rules_path=rules, audit_path=audit or Path("logs/audit.jsonl"))
         decision = guard.evaluate(action)
         typer.echo(json.dumps(decision.to_dict(), indent=2))
         return
@@ -534,6 +540,40 @@ def governance_status(
         typer.echo(
             f"budget: {used:,} / {cfg.api_bytes_per_day:,} api bytes today ({pct:.1f}%)"
         )
+
+
+@behavior_app.command("status")
+def behavior_status(
+    rules: Optional[Path] = typer.Option(None, "--rules", help="Path to a custom rules YAML file."),
+    audit: Optional[Path] = typer.Option(None, "--audit", help="Path to the audit log."),
+):
+    """Show configured anomaly thresholds and current per-intent burst counts."""
+    audit_path = audit or Path("logs/audit.jsonl")
+    guard = Guard(rules_path=rules, audit_path=audit_path)
+    cfg = guard.behavior_config
+    rc = guard.governance_counter  # shares the same RollingCounter shape
+
+    typer.echo(f"behavior:  {'enabled' if cfg.enabled else 'DISABLED'}")
+    typer.echo(f"audit log: {audit_path}")
+    typer.echo("")
+
+    typer.echo(f"rate_burst (window {cfg.burst_window_seconds}s):")
+    if not cfg.rate_burst:
+        typer.echo("  (no per-intent burst thresholds configured)")
+    for intent_key, threshold in sorted(cfg.rate_burst.items()):
+        used = rc.count_intent(intent_key.upper(), cfg.burst_window_seconds)
+        flag = " ANOMALY" if used >= threshold else ""
+        typer.echo(f"  {intent_key:<20} {used:>4}/{threshold}{flag}")
+
+    typer.echo("")
+    typer.echo(
+        f"rate_spike: last hour > {cfg.rate_multiplier_threshold}x 24h median "
+        f"(needs ≥{cfg.spike_min_baseline_hours}h history)"
+    )
+    typer.echo(
+        f"quiet_hour: needs ≥{cfg.quiet_hour_min_total_actions} total actions "
+        "before flagging time-of-day outliers"
+    )
 
 
 if __name__ == "__main__":

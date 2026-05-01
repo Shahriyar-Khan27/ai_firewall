@@ -62,6 +62,9 @@ def _make_guard(approval: str = "block") -> Guard:
     `approval` is one of:
       "block"   → REQUIRE_APPROVAL is rejected (auto-deny). Default and safest.
       "approve" → REQUIRE_APPROVAL is auto-approved. Use only with trust.
+
+    Guard itself honours `AI_FIREWALL_AUDIT_PATH` for the default audit log,
+    so callers (including tests) can redirect on-disk state via env.
     """
     fn = auto_approve if approval == "approve" else auto_deny
     return Guard(approval_fn=fn)
