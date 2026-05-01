@@ -2,9 +2,11 @@
 
 <img src="https://raw.githubusercontent.com/Shahriyar-Khan27/ai_firewall/main/assets/logo.png" alt="AI Execution Firewall" width="120" height="120" />
 
-# 🛡️ AI Execution Firewall
+# AI Execution Firewall
 
-### Stop your AI agent from running `rm -rf /` while you are at lunch.
+### A deterministic policy gate for every action an AI agent executes.
+
+*Block dangerous shell commands, file edits, SQL queries, and HTTP requests before they reach the OS. Approve the rest in one click.*
 
 [![PyPI](https://img.shields.io/pypi/v/ai-execution-firewall.svg)](https://pypi.org/project/ai-execution-firewall/)
 [![VS Marketplace](https://vsmarketplacebadges.dev/version-short/sk-dev-ai.ai-execution-firewall.png?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
