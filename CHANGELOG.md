@@ -4,6 +4,92 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.3.0] — 2026-05-01
+
+The "fade into the background" release. v0.2.x worked but prompted on every
+risky action. After a week, users would turn it off. v0.3.0 adds memory,
+inheritance, semantic parsing, signed audit, MCP auto-wrapping, Docker
+dry-runs, a standalone binary, and Cursor secret-DB monitoring.
+
+### Smart-flow core
+
+- **Semantic command parsing** ([ai_firewall/parser/shell_ast.py](ai_firewall/parser/shell_ast.py)).
+  bashlex-backed AST, decodes `echo "<b64>" | base64 -d | sh`, resolves
+  `RM=rm; $RM -rf /` cross-statement assignments, walks pipelines and
+  command/process substitutions. Obfuscation alone bumps risk to HIGH —
+  even a benign decoded payload is suspicious because the obfuscation is.
+- **Approved-pattern memory** ([ai_firewall/approval/pattern_memory.py](ai_firewall/approval/pattern_memory.py)).
+  SQLite at `~/.ai-firewall/memory.db`. Once you approve `npm run build`
+  in a project, the firewall stops asking. Strict gating: same project,
+  same intent, ≥0.8 Jaccard similarity, and historical risk ≥ current
+  risk (so a low-risk approval never auto-approves a higher-risk repeat).
+- **Permission inheritance** ([ai_firewall/engine/inheritance.py](ai_firewall/engine/inheritance.py),
+  [ai_firewall/history/shell_reader.py](ai_firewall/history/shell_reader.py)).
+  Reads bash / zsh / fish / PowerShell history. If you typed an
+  equivalent command in your own terminal in the last 5 min, the AI's
+  request is auto-approved with a status-bar toast.
+- **HMAC-signed audit trails** ([ai_firewall/audit/logger.py](ai_firewall/audit/logger.py),
+  [ai_firewall/audit/verifier.py](ai_firewall/audit/verifier.py)).
+  Opt-in via `guard audit init-key` or the `AI_FIREWALL_AUDIT_KEY` env
+  var. Every record HMAC-SHA256-signed over canonical JSON. New
+  subcommands: `guard audit verify` and `guard audit show
+  --tampered-only`. Constant-time signature compare.
+
+### MCP transparent proxy (Feature A)
+
+- **MCP detector** ([ai_firewall/discovery/mcp_detector.py](ai_firewall/discovery/mcp_detector.py)).
+  Scans `~/.claude/mcp.json`, `~/.cursor/mcp.json`,
+  `~/.continue/config.json`, `.mcp.json` in any workspace. Reports
+  wrapped vs unwrapped MCP servers.
+- **MCP proxy** ([ai_firewall/proxy/mcp_proxy.py](ai_firewall/proxy/mcp_proxy.py)).
+  `guard mcp-proxy` is a stdio shim that wraps an upstream MCP server.
+  Inspects `tools/call` JSON-RPC requests, runs the proposed action
+  through `Guard.evaluate`, and returns a tool-error response (never
+  forwarded to the upstream) on BLOCK or REQUIRE_APPROVAL.
+  Heuristically maps tool args to Action types so generic MCP tools
+  (`run_shell`, `write_file`, `run_sql_query`, `fetch_url`, …) all gate.
+- **`guard mcp install/uninstall/scan`** — automate the mcp.json edit so
+  users don't have to hand-write the wrapper config.
+
+### Distribution (Feature G)
+
+- **PyInstaller standalone binary**: `scripts/build-standalone.sh` and
+  `.bat` produce a single `guard` / `guard.exe` (~30 MB) with no Python
+  prerequisite. New CI workflow `.github/workflows/release-binaries.yml`
+  runs the matrix on tag push: ubuntu-x86_64, macos-x86_64, macos-arm64,
+  windows-x86_64. Each binary is smoke-tested (`guard sql "DROP DATABASE
+  prod" --evaluate-only` must BLOCK) before being attached to the GitHub
+  release.
+
+### High-trust modes
+
+- **Sandbox replay (Feature F)** ([ai_firewall/adapters/sandbox.py](ai_firewall/adapters/sandbox.py)).
+  `guard run "<cmd>" --dryrun` mounts a copy of the workdir into a
+  Docker container, runs the command there with `--network none`, then
+  diffs the workdir before/after and surfaces the file-change list.
+  Refuses on workdirs >50 MB; gracefully reports "Docker unavailable"
+  rather than fail-open.
+- **Cursor secret-DB watcher (Feature H)**
+  ([vscode-extension/src/secret_watcher.ts](vscode-extension/src/secret_watcher.ts)).
+  Detection-only, never patches `fs.readFile`. Watches the editor's
+  `state.vscdb` (Code/Cursor) for modifications and surfaces a webview
+  log via `AI Firewall: Show Recent Secret-DB Activity`.
+
+### VS Code extension polish
+
+- New command **AI Firewall: Show Recent Secret-DB Activity**.
+- Smart-flow status-bar toasts: when the firewall auto-approves via memory
+  or inheritance, a quiet "$(check) Firewall: auto-approved (learned from
+  you)" toast surfaces what just happened. No webview, no friction.
+
+### Numbers
+
+- 269 → 285 tests (16 new across `test_shell_ast`, `test_audit_hmac`,
+  `test_pattern_memory`, `test_inheritance`, `test_smart_flow`,
+  `test_mcp_proxy`, `test_sandbox`).
+- New top-level deps: `bashlex>=0.18`. `pyinstaller` is a build-time
+  extra (CI only).
+
 ## [0.2.0] — 2026-04-30
 
 The "auto-mode" release. The firewall now intercepts AI agents that execute on their own — not just users who deliberately route commands through it.

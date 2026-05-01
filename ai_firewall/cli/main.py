@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -62,9 +63,14 @@ def run(
     audit: Optional[Path] = typer.Option(None, "--audit", help="Path to the audit log."),
     auto_approve_flag: bool = typer.Option(False, "--auto-approve", help="Skip the interactive prompt; treat REQUIRE_APPROVAL as approved. For non-interactive callers (e.g. the VS Code extension after a user click)."),
     auto_deny_flag: bool = typer.Option(False, "--auto-deny", help="Skip the interactive prompt; treat REQUIRE_APPROVAL as denied. For dry-run / CI use."),
+    dryrun: bool = typer.Option(False, "--dryrun", help="Run the command in a Docker sandbox first; show the file diff instead of touching the real disk."),
+    sandbox_image: str = typer.Option("alpine:latest", "--sandbox-image", help="Docker image to use for --dryrun."),
 ):
     """Evaluate a shell command and execute it if policy allows."""
     guard = _make_guard(rules, audit, auto_approve_flag=auto_approve_flag, auto_deny_flag=auto_deny_flag)
+    if dryrun:
+        from ai_firewall.adapters.sandbox import DockerSandboxAdapter
+        guard.adapters["shell"] = DockerSandboxAdapter(image=sandbox_image)
     action = parse_shell_string(command)
     try:
         result = guard.execute(action)
@@ -154,25 +160,140 @@ def sql(
     raise typer.Exit(code=result.execution.exit_code)
 
 
-@cli.command()
-def mcp() -> None:
-    """Launch the MCP server over stdio.
+mcp_app = typer.Typer(help="Run / install the firewall as an MCP server or proxy.", no_args_is_help=False, invoke_without_command=True)
+cli.add_typer(mcp_app, name="mcp")
 
-    Wire this up in your MCP host config (Claude Code, Cursor, Continue, ...) so
-    the AI's shell / file / SQL / HTTP actions route through the firewall:
 
-        {"mcpServers": {"ai-firewall": {"command": "guard", "args": ["mcp"]}}}
-    """
+@mcp_app.callback(invoke_without_command=True)
+def _mcp_default(ctx: typer.Context) -> None:
+    """Default action for `guard mcp` (no subcommand) is to launch the MCP server."""
+    if ctx.invoked_subcommand is None:
+        # Re-implement the v0.2 behaviour inline so `guard mcp` still works.
+        try:
+            from ai_firewall.mcp_server import main as run_server
+        except ImportError:
+            typer.secho(
+                "MCP server requires the `mcp` package: pip install 'ai-execution-firewall[mcp]'",
+                fg=typer.colors.RED, err=True,
+            )
+            raise typer.Exit(code=1)
+        run_server()
+
+
+@mcp_app.command("server")
+def mcp_server() -> None:
+    """Launch the MCP server over stdio (same as bare `guard mcp`)."""
     try:
         from ai_firewall.mcp_server import main as run_server
     except ImportError:
         typer.secho(
             "MCP server requires the `mcp` package: pip install 'ai-execution-firewall[mcp]'",
-            fg=typer.colors.RED,
-            err=True,
+            fg=typer.colors.RED, err=True,
         )
         raise typer.Exit(code=1)
     run_server()
+
+
+@mcp_app.command("scan")
+def mcp_scan(
+    workspace: Optional[Path] = typer.Option(None, "--workspace", help="Project root to scan in addition to global configs."),
+):
+    """List MCP servers configured in known host configs (Claude Code / Cursor / Continue)."""
+    from ai_firewall.discovery.mcp_detector import discover_workspace_paths, scan
+    extra = discover_workspace_paths(workspace) if workspace else None
+    entries = scan(extra_paths=extra)
+    if not entries:
+        typer.echo("(no MCP servers found in known configs)")
+        return
+    for e in entries:
+        marker = "[wrapped]" if e.wrapped else "[unwrapped]"
+        typer.echo(f"{marker:12} {e.host:12} {e.name:25} {e.config_path}")
+        if e.wrapped and e.upstream_command:
+            typer.echo(f"             upstream: {e.upstream_command} {' '.join(e.upstream_args)}")
+
+
+@mcp_app.command("install")
+def mcp_install(
+    name: str = typer.Argument(..., help="Server name to wrap (must match a key in mcpServers)."),
+    workspace: Optional[Path] = typer.Option(None, "--workspace", help="Project root to scan in addition to global configs."),
+    guard_cmd: str = typer.Option("guard", "--guard-cmd", help="Path to the guard binary (default: 'guard' from PATH)."),
+):
+    """Wrap a single MCP server with the firewall proxy. Edits the host config in place."""
+    from ai_firewall.discovery.mcp_detector import discover_workspace_paths, install, scan, write_servers
+    import json as _json
+
+    extra = discover_workspace_paths(workspace) if workspace else None
+    entries = scan(extra_paths=extra)
+    matches = [e for e in entries if e.name == name]
+    if not matches:
+        typer.secho(f"no MCP server named '{name}' found", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    if len(matches) > 1:
+        typer.secho(f"'{name}' is configured in {len(matches)} places — refusing to install ambiguously", fg=typer.colors.RED, err=True)
+        for e in matches:
+            typer.echo(f"  - {e.config_path}")
+        raise typer.Exit(code=1)
+
+    e = matches[0]
+    if e.wrapped:
+        typer.echo(f"'{name}' is already wrapped — nothing to do.")
+        return
+
+    # Load the file fresh, swap just this one server's spec, write back.
+    data = _json.loads(e.config_path.read_text(encoding="utf-8"))
+    servers = data.get("mcpServers") or {}
+    servers[name] = install(e, guard_cmd=guard_cmd)
+    write_servers(e.config_path, servers)
+    typer.echo(f"wrapped '{name}' in {e.config_path}")
+
+
+@mcp_app.command("uninstall")
+def mcp_uninstall(
+    name: str = typer.Argument(..., help="Server name to unwrap."),
+    workspace: Optional[Path] = typer.Option(None, "--workspace"),
+):
+    """Restore a previously-wrapped MCP server to its original spec."""
+    from ai_firewall.discovery.mcp_detector import discover_workspace_paths, scan, uninstall, write_servers
+    import json as _json
+
+    extra = discover_workspace_paths(workspace) if workspace else None
+    entries = scan(extra_paths=extra)
+    matches = [e for e in entries if e.name == name and e.wrapped]
+    if not matches:
+        typer.secho(f"no wrapped MCP server named '{name}' found", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    e = matches[0]
+    spec = uninstall(e)
+    if spec is None:
+        typer.secho("could not recover original command (config malformed?)", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    data = _json.loads(e.config_path.read_text(encoding="utf-8"))
+    servers = data.get("mcpServers") or {}
+    servers[name] = spec
+    write_servers(e.config_path, servers)
+    typer.echo(f"unwrapped '{name}' in {e.config_path}")
+
+
+@cli.command(name="mcp-proxy", help="(Internal) stdio proxy that routes MCP traffic through the firewall.")
+def mcp_proxy_cmd(
+    upstream_cmd: str = typer.Option(..., "--upstream-cmd"),
+    upstream_arg: Optional[list[str]] = typer.Option(None, "--upstream-arg"),
+    firewall_wrapped: bool = typer.Option(False, "--firewall-wrapped", help="Marker for self-detection."),
+    approval: str = typer.Option(
+        os.environ.get("AI_FIREWALL_PROXY_APPROVAL", "block"),
+        "--approval",
+        help="Behaviour on REQUIRE_APPROVAL: 'block' (default) or 'approve'.",
+    ),
+):
+    from ai_firewall.proxy.mcp_proxy import run_proxy
+    rc = run_proxy(
+        upstream_cmd=upstream_cmd,
+        upstream_args=list(upstream_arg or []),
+        approval_mode=approval,
+    )
+    raise typer.Exit(code=rc)
 
 
 @cli.command()

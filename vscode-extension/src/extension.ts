@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
 import { Decision, ExecResult, FirewallClient } from "./firewall";
+import { SecretWatcher, showSecretActivityWebview } from "./secret_watcher";
 import { showApprovalPanel } from "./webview";
 
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 let firewall: FirewallClient;
+let secretWatcher: SecretWatcher | undefined;
 
 interface ActionRunner {
   /** Human-readable label shown in prompts and audit lines. */
@@ -28,13 +30,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
   firewall = new FirewallClient();
 
+  // Passive secret-DB watcher (Feature H). Detection-only, never patches fs.
+  secretWatcher = new SecretWatcher(context, outputChannel);
+  secretWatcher.start();
+  context.subscriptions.push(secretWatcher);
+
   context.subscriptions.push(
     vscode.commands.registerCommand("aiFirewall.runCommand", () => runShellCommand(context)),
     vscode.commands.registerCommand("aiFirewall.evaluateSelection", () => evaluateSelectionAsShell(context)),
     vscode.commands.registerCommand("aiFirewall.evaluateSql", () => runSqlQuery(context)),
     vscode.commands.registerCommand("aiFirewall.evaluateSqlSelection", () => evaluateSelectionAsSql(context)),
     vscode.commands.registerCommand("aiFirewall.evaluateApi", () => runApiRequest(context)),
-    vscode.commands.registerCommand("aiFirewall.showPolicy", () => showPolicy())
+    vscode.commands.registerCommand("aiFirewall.showPolicy", () => showPolicy()),
+    vscode.commands.registerCommand("aiFirewall.showSecretActivity", () => {
+      if (secretWatcher) showSecretActivityWebview(context, secretWatcher);
+    }),
   );
 
   outputChannel.appendLine("[firewall] extension activated");
@@ -126,6 +136,14 @@ async function driveAction(context: vscode.ExtensionContext, runner: ActionRunne
   }
 
   if (decision.decision === "ALLOW") {
+    // Smart-flow auto-approval (memory match or permission inheritance) — surface
+    // a quiet toast so the user knows the firewall did something on their behalf.
+    const r = decision.reason || "";
+    if (r.startsWith("memory match")) {
+      vscode.window.setStatusBarMessage("$(check) Firewall: auto-approved (learned from you)", 4000);
+    } else if (r.startsWith("inheritance")) {
+      vscode.window.setStatusBarMessage("$(check) Firewall: auto-approved (you just ran an equivalent command)", 4000);
+    }
     await execute(runner, "auto-approve");
     return;
   }

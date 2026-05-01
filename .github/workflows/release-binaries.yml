@@ -1,0 +1,88 @@
+name: Build standalone binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }} / ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            asset_name: guard-linux-x86_64
+          - os: macos-latest
+            arch: x86_64
+            asset_name: guard-macos-x86_64
+          - os: macos-14
+            arch: arm64
+            asset_name: guard-macos-arm64
+          - os: windows-latest
+            arch: x86_64
+            asset_name: guard-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,mcp]"
+          pip install pyinstaller
+
+      - name: Run tests once before bundling
+        run: pytest -q
+
+      - name: Build binary
+        shell: bash
+        run: |
+          python -m PyInstaller \
+            --noconfirm \
+            --onefile \
+            --name guard \
+            --add-data "ai_firewall/config/default_rules.yaml${{ runner.os == 'Windows' && ';' || ':' }}ai_firewall/config" \
+            --hidden-import bashlex \
+            --hidden-import sqlglot \
+            --hidden-import mcp \
+            --hidden-import mcp.server.fastmcp \
+            ai_firewall/cli/main.py
+
+      - name: Smoke-test the binary
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then BIN="dist/guard.exe"; else BIN="dist/guard"; fi
+          $BIN --help
+          $BIN sql "DROP DATABASE prod" --evaluate-only
+          $BIN api GET "http://169.254.169.254/" --evaluate-only
+
+      - name: Rename for release
+        shell: bash
+        run: |
+          mkdir -p out
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp dist/guard.exe out/${{ matrix.asset_name }}
+          else
+            cp dist/guard out/${{ matrix.asset_name }}
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: out/${{ matrix.asset_name }}
+
+      - name: Attach to GitHub release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: out/${{ matrix.asset_name }}

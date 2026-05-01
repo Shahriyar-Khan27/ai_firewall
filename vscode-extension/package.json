@@ -2,7 +2,7 @@
   "name": "ai-execution-firewall",
   "displayName": "AI Execution Firewall",
   "description": "Gate AI-generated shell commands, file edits, SQL queries, and HTTP requests before they execute. Deterministic policy + risk + impact analysis with an in-editor approval UI.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "sk-dev-ai",
   "license": "MIT",
   "icon": "icon.png",
@@ -74,6 +74,11 @@
       {
         "command": "aiFirewall.showPolicy",
         "title": "Show Effective Policy",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.showSecretActivity",
+        "title": "Show Recent Secret-DB Activity",
         "category": "AI Firewall"
       }
     ],
