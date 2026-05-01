@@ -2,6 +2,31 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.4.0] — 2026-05-01
+
+### Added
+
+- **AI Firewall: Scan Text for Secrets and PII…** — input box version of
+  `guard scan`. Paste any text (chat message, prompt, error log) and the
+  extension surfaces severity + per-finding lines in a preview document.
+  Useful as a paste-time check: "did I just put a real key into a chat?"
+- **AI Firewall: Scan Selection for Secrets and PII** — same but operates
+  on the active editor's current selection. Ideal for checking a chunk
+  of code before pasting into an external tool.
+- **AI Firewall: Show Governance Status** — opens a preview document
+  with current rate-limit counters per intent, loop-detection settings,
+  and 24h API byte spend.
+- **AI Firewall: Show Behavior Status** — shows configured anomaly
+  thresholds (rate burst per intent, spike multiplier, quiet-hour
+  guards) alongside the current per-intent burst counts.
+
+### Changed
+
+- Bumped to v0.4.0 to align with the Python package.
+- Extension now expects ai-execution-firewall ≥ 0.4.0 (the four new
+  commands shell out to `guard scan` / `guard governance status` /
+  `guard behavior status` which only exist in 0.4.0+).
+
 ## [0.3.0] — 2026-05-01
 
 ### Added

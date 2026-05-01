@@ -45,6 +45,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("aiFirewall.showSecretActivity", () => {
       if (secretWatcher) showSecretActivityWebview(context, secretWatcher);
     }),
+    vscode.commands.registerCommand("aiFirewall.scanText", () => scanText()),
+    vscode.commands.registerCommand("aiFirewall.scanSelection", () => scanSelection()),
+    vscode.commands.registerCommand("aiFirewall.showGovernanceStatus", () => showGovernanceStatus()),
+    vscode.commands.registerCommand("aiFirewall.showBehaviorStatus", () => showBehaviorStatus()),
   );
 
   outputChannel.appendLine("[firewall] extension activated");
@@ -107,6 +111,77 @@ async function showPolicy(): Promise<void> {
   try {
     const yaml = await firewall.policyShow();
     const doc = await vscode.workspace.openTextDocument({ content: yaml, language: "yaml" });
+    await vscode.window.showTextDocument(doc, { preview: true });
+  } catch (e) {
+    vscode.window.showErrorMessage(`AI Firewall: ${(e as Error).message}`);
+  }
+}
+
+async function scanText(): Promise<void> {
+  const text = await vscode.window.showInputBox({
+    prompt: "Text to scan for leaked secrets and PII",
+    placeHolder: "paste a chat message, a prompt, an error log…",
+    ignoreFocusOut: true,
+  });
+  if (!text) return;
+  await runScan(text);
+}
+
+async function scanSelection(): Promise<void> {
+  const text = readSelection();
+  if (!text) return;
+  await runScan(text);
+}
+
+async function runScan(text: string): Promise<void> {
+  outputChannel.appendLine(`[firewall] scan: ${text.length} chars`);
+  try {
+    const result = await firewall.scan(text);
+    outputChannel.appendLine(`[firewall] scan severity=${result.severity} findings=${result.findings.length}`);
+    if (!result.findings.length) {
+      vscode.window.showInformationMessage(
+        "🛡️ Firewall scan: clean — no secrets or PII detected."
+      );
+      return;
+    }
+    const summary =
+      `severity: ${result.severity}\n\n` +
+      result.findings.map((f) => `  • ${f}`).join("\n");
+    const doc = await vscode.workspace.openTextDocument({
+      content: summary,
+      language: "plaintext",
+    });
+    await vscode.window.showTextDocument(doc, { preview: true });
+
+    const sev = result.severity.toLowerCase();
+    if (sev === "critical" || sev === "major") {
+      vscode.window.showWarningMessage(
+        `🛡️ Firewall scan: ${result.findings.length} finding(s) — severity ${result.severity}.`
+      );
+    } else {
+      vscode.window.showInformationMessage(
+        `🛡️ Firewall scan: ${result.findings.length} finding(s) — severity ${result.severity}.`
+      );
+    }
+  } catch (e) {
+    vscode.window.showErrorMessage(`AI Firewall: ${(e as Error).message}`);
+  }
+}
+
+async function showGovernanceStatus(): Promise<void> {
+  try {
+    const text = await firewall.governanceStatus();
+    const doc = await vscode.workspace.openTextDocument({ content: text, language: "plaintext" });
+    await vscode.window.showTextDocument(doc, { preview: true });
+  } catch (e) {
+    vscode.window.showErrorMessage(`AI Firewall: ${(e as Error).message}`);
+  }
+}
+
+async function showBehaviorStatus(): Promise<void> {
+  try {
+    const text = await firewall.behaviorStatus();
+    const doc = await vscode.workspace.openTextDocument({ content: text, language: "plaintext" });
     await vscode.window.showTextDocument(doc, { preview: true });
   } catch (e) {
     vscode.window.showErrorMessage(`AI Firewall: ${(e as Error).message}`);

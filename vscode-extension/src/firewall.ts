@@ -129,6 +129,52 @@ export class FirewallClient {
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
   }
 
+  /**
+   * Calls `guard scan <text> --json` and parses the result.
+   * Returns the severity ladder + per-finding lines so the UI can
+   * present them however it likes.
+   */
+  async scan(text: string): Promise<{ severity: string; findings: string[] }> {
+    const args = ["scan", text, "--json"];
+    const result = await this.spawn(args);
+    // `scan` exits 1 when severity is major/critical — that's not an error.
+    try {
+      return JSON.parse(result.stdout) as { severity: string; findings: string[] };
+    } catch {
+      throw new Error(`guard scan returned non-JSON output: ${result.stdout || result.stderr}`);
+    }
+  }
+
+  /** Calls `guard governance status` and returns the rendered text. */
+  async governanceStatus(): Promise<string> {
+    const cfg = vscode.workspace.getConfiguration("aiFirewall");
+    const args = ["governance", "status"];
+    const rules = cfg.get<string>("rulesPath", "");
+    const audit = cfg.get<string>("auditPath", "");
+    if (rules) args.push("--rules", rules);
+    if (audit) args.push("--audit", audit);
+    const result = await this.spawn(args);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard governance status failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout;
+  }
+
+  /** Calls `guard behavior status` and returns the rendered text. */
+  async behaviorStatus(): Promise<string> {
+    const cfg = vscode.workspace.getConfiguration("aiFirewall");
+    const args = ["behavior", "status"];
+    const rules = cfg.get<string>("rulesPath", "");
+    const audit = cfg.get<string>("auditPath", "");
+    if (rules) args.push("--rules", rules);
+    if (audit) args.push("--audit", audit);
+    const result = await this.spawn(args);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard behavior status failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout;
+  }
+
   /** Calls `guard policy show` and returns the YAML text. */
   async policyShow(): Promise<string> {
     const cfg = vscode.workspace.getConfiguration("aiFirewall");
