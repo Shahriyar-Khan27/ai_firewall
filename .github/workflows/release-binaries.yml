@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write   # needed for softprops/action-gh-release to upload assets
+
 jobs:
   build:
     name: Build (${{ matrix.os }} / ${{ matrix.arch }})
