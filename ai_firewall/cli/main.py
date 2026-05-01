@@ -29,8 +29,10 @@ for _stream in (sys.stdout, sys.stderr):
 cli = typer.Typer(help="AI Execution Firewall — gate AI-generated actions before they run.", no_args_is_help=True)
 policy_app = typer.Typer(help="Inspect or validate policy rule files.", no_args_is_help=True)
 audit_app = typer.Typer(help="Inspect and verify the audit JSONL log.", no_args_is_help=True)
+governance_app = typer.Typer(help="Inspect rate-limit / loop / budget counters.", no_args_is_help=True)
 cli.add_typer(policy_app, name="policy")
 cli.add_typer(audit_app, name="audit")
+cli.add_typer(governance_app, name="governance")
 
 
 def _make_guard(
@@ -492,6 +494,46 @@ def policy_lint(file: Path = typer.Argument(..., exists=True, file_okay=True, di
         typer.secho("rules file must be a mapping at top level", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
     typer.echo(f"ok — {len(data)} sections")
+
+
+@governance_app.command("status")
+def governance_status(
+    rules: Optional[Path] = typer.Option(None, "--rules", help="Path to a custom rules YAML file."),
+    audit: Optional[Path] = typer.Option(None, "--audit", help="Path to the audit log."),
+):
+    """Show current rate-limit counters, loop windows, and 24h API spend."""
+    audit_path = audit or Path("logs/audit.jsonl")
+    guard = Guard(rules_path=rules, audit_path=audit_path)
+    cfg = guard.governance_config
+    rc = guard.governance_counter
+
+    typer.echo(f"governance: {'enabled' if cfg.enabled else 'DISABLED'}")
+    typer.echo(f"audit log:  {audit_path}")
+    typer.echo("")
+
+    typer.echo("rate limits:")
+    if not cfg.rate_limits:
+        typer.echo("  (none configured)")
+    for intent_key, spec in sorted(cfg.rate_limits.items()):
+        used = rc.count_intent(intent_key.upper(), spec["window"])
+        bar = "OVER" if used >= spec["max"] else f"{used}/{spec['max']}"
+        typer.echo(f"  {intent_key:<20} {bar:>10}  (window {spec['window']}s)")
+
+    typer.echo("")
+    typer.echo(
+        f"loop detection: same command >{cfg.loop_max_repeats}× in "
+        f"{cfg.loop_window_seconds}s = block"
+    )
+
+    typer.echo("")
+    if cfg.api_bytes_per_day is None:
+        typer.echo("budget: no API byte cap configured")
+    else:
+        used = rc.sum_bytes_today("api")
+        pct = (used / cfg.api_bytes_per_day) * 100 if cfg.api_bytes_per_day else 0
+        typer.echo(
+            f"budget: {used:,} / {cfg.api_bytes_per_day:,} api bytes today ({pct:.1f}%)"
+        )
 
 
 if __name__ == "__main__":

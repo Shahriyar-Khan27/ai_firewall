@@ -14,12 +14,17 @@ from ai_firewall.engine.decision import Decision
 
 
 class AuditLogger:
-    """Append-only JSONL audit log with optional HMAC signing.
+    """Append-only JSONL audit log with optional HMAC signing and external sinks.
 
-    Each record is a JSON object on its own line. When `hmac_key` is provided
-    (or auto-discovered), every record carries a `signature` field — an
-    HMAC-SHA256 over the canonical JSON of the record (sorted keys, no
-    whitespace, signature field omitted from the input).
+    Each record is a JSON object. When `hmac_key` is provided (or auto-
+    discovered), every record carries a `signature` field — HMAC-SHA256 over
+    the canonical JSON (sorted keys, no whitespace, signature field excluded).
+
+    By default the local JSONL file at `path` is the only sink. Pass `sinks`
+    to add SIEM destinations (syslog, Splunk HEC, generic HTTPS webhook, …).
+    The local file write stays synchronous so the on-disk record is durable
+    before `log()` returns; remote sinks run on daemon threads with bounded
+    queues, never blocking the firewall's hot path.
 
     A fresh log file gets a header record on first write so verifiers can
     check the key fingerprint matches before validating subsequent rows.
@@ -30,11 +35,25 @@ class AuditLogger:
         path: Path,
         *,
         hmac_key: bytes | None = None,
+        sinks: list | None = None,
     ):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
         self._hmac_key = hmac_key if hmac_key is not None else _resolve_hmac_key()
+
+        # Default sinks = the local file. Callers can override with `sinks`.
+        # When `sinks` is given but doesn't contain a JsonlFileSink for `path`,
+        # we still write to the local file for compatibility with existing
+        # `guard audit verify <path>` tooling.
+        from ai_firewall.audit.sinks import JsonlFileSink, AuditSink  # noqa: F401
+        if sinks is None:
+            self._sinks: list = [JsonlFileSink(self.path)]
+        else:
+            self._sinks = list(sinks)
+            if not any(isinstance(s, JsonlFileSink) for s in self._sinks):
+                self._sinks.insert(0, JsonlFileSink(self.path))
+
         # Write the header once per log file so a verifier can confirm the key.
         if self._hmac_key is not None and not self.path.exists():
             self._write_header()
@@ -63,8 +82,18 @@ class AuditLogger:
         }
         if self._hmac_key is not None:
             record["signature"] = _sign(record, self._hmac_key)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        self._broadcast(record)
+
+    def _broadcast(self, record: dict) -> None:
+        """Send a record to every configured sink. Never raises."""
+        for sink in self._sinks:
+            try:
+                sink.write(record)
+            except Exception as e:  # noqa: BLE001
+                import logging
+                logging.getLogger("ai_firewall.audit").warning(
+                    "audit sink %s failed: %s", type(sink).__name__, e
+                )
 
     def _write_header(self) -> None:
         assert self._hmac_key is not None
@@ -75,8 +104,15 @@ class AuditLogger:
             "version": 1,
         }
         header["signature"] = _sign(header, self._hmac_key)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(header, ensure_ascii=False) + "\n")
+        self._broadcast(header)
+
+    def close(self) -> None:
+        """Flush + close every sink. Safe to call multiple times."""
+        for sink in self._sinks:
+            try:
+                sink.close()
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------

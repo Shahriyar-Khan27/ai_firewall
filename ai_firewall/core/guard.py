@@ -12,6 +12,7 @@ from ai_firewall.approval.cli_prompt import ApprovalFn, prompt_user
 from ai_firewall.approval.pattern_memory import PatternMemory
 from ai_firewall.audit.logger import AuditLogger
 from ai_firewall.core.action import Action
+from ai_firewall.engine import governance as gov_mod
 from ai_firewall.engine import impact as impact_mod
 from ai_firewall.engine import intent as intent_mod
 from ai_firewall.engine import risk as risk_mod
@@ -48,6 +49,7 @@ class Guard:
         memory_db_path: Path | str | None = None,
         enable_memory: bool = True,
         enable_inheritance: bool = True,
+        enable_governance: bool = True,
         inheritance_window_seconds: float = 300.0,
     ):
         self.policy = (
@@ -86,12 +88,33 @@ class Guard:
             self.memory = None
             self._owns_memory = False
 
+        # v0.4.0 governance: rate limits, loop detection, daily API budget.
+        # Reads the same audit log this Guard writes to as the source of truth.
+        self.enable_governance = enable_governance
+        self.governance_config = gov_mod.GovernanceConfig.from_rules_dict(self.policy.rules)
+        self.governance_counter = gov_mod.RollingCounter(self.audit.path)
+
     # --- Pipeline ----------------------------------------------------------
 
     def evaluate(self, action: Action) -> Decision:
         intent = intent_mod.classify(action)
         flags = intent_mod.feature_flags(action)
         base_risk = risk_mod.score(action, intent, flags)
+
+        # v0.4.0 governance: rate limit, loop detection, daily API budget.
+        # Runs before policy so a runaway loop can't slip through smart-flow.
+        if self.enable_governance:
+            gov_verdict = gov_mod.check(
+                action, counter=self.governance_counter, config=self.governance_config
+            )
+            if gov_verdict is not None:
+                return Decision(
+                    decision="BLOCK",
+                    reason=f"governance ({gov_verdict.rule}): {gov_verdict.reason}",
+                    intent=intent,
+                    risk=base_risk,
+                    impact=impact_mod.Impact(notes="not computed (governance block)"),
+                )
 
         # First pass: cheap policy check on base risk. BLOCK short-circuits.
         verdict = self.policy.evaluate(action, intent, base_risk)

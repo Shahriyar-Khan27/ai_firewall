@@ -75,3 +75,26 @@ network_egress:
   # `sftp`, `ftp`). The firewall can't inspect what flows through a raw socket
   # the way it can for HTTP, so we always confirm.
   require_approval: true
+
+governance:
+  # Cost & resource governance. Read-side: scans the local audit log to count
+  # recent activity. Disable per-Guard with `enable_governance=False`.
+  enabled: true
+
+  rate_limit:
+    # Refuse if more than `max` actions of this intent occurred in the last
+    # `window` seconds. Tune for your project's normal cadence.
+    file_delete: { window: 60s, max: 20 }
+    db_destructive: { window: 60s, max: 5 }
+    api_destructive: { window: 60s, max: 5 }
+    shell_exec: { window: 60s, max: 200 }
+
+  loop_detection:
+    # Same exact normalized command repeated too fast = stuck-in-a-loop agent.
+    same_command_within: 10s
+    max: 5
+
+  budget:
+    # Best-effort API "spend" cap, proxied by request-body bytes per 24h.
+    # Comment out to disable; set high (e.g. 100_000_000) for noisy projects.
+    api_bytes_per_day: 100_000_000
