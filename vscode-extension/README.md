@@ -118,6 +118,7 @@ A status-bar item (`🛡️ Firewall`, bottom-left) is a one-click shortcut to *
 
 - The Marketplace listing's contributor sidebar may show a stale entry after a recent history rewrite. GitHub's contributor-graph cache typically refreshes within a few weeks; the extension itself is unaffected.
 - The current detection of MCP host configurations covers Claude Code, Cursor, Continue, and any workspace `.mcp.json`. Aider, Cline, and Zed have evolving config layouts and are best supported by community pull requests against `ai_firewall/discovery/mcp_detector.py`.
+- On Windows, `pip install ai-execution-firewall` can fail with `The code execution cannot proceed because python312.dll was not found` when the host has a broken or upgraded Python installation. This is a host-environment issue, not an extension or firewall bug. Reinstall Python from <https://www.python.org/downloads/> with "Add Python to PATH" checked, or skip Python entirely by downloading the [standalone `guard-windows.exe` binary](https://github.com/Shahriyar-Khan27/ai_firewall/releases/latest) and pointing the extension at it via the `aiFirewall.guardPath` setting.
 
 ## Release notes
 

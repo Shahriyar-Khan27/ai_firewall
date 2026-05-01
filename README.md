@@ -125,6 +125,27 @@ cd ai_firewall
 pip install -e ".[dev]"
 ```
 
+## Troubleshooting
+
+### Windows: `pythonNNN.dll was not found` when running `pip install`
+
+If `pip install ai-execution-firewall` produces a Windows system error similar to:
+
+> The code execution cannot proceed because python312.dll was not found. Reinstalling the program may fix this problem.
+
+This is a broken Python install on the host, not a problem with this package. `pip.exe` itself is dynamically linked against `python312.dll` (or `python311.dll`, `python313.dll`, and so on), so it cannot run when that DLL is missing or unreachable on `PATH`. The usual cause is a half-removed or upgraded Python install that left a stale `pip.exe` behind.
+
+Two paths to a fix:
+
+1. **Reinstall Python.** Uninstall every Python entry under Settings, Apps, Installed apps, then install Python 3.12 or 3.13 from <https://www.python.org/downloads/> with "Add Python to PATH" checked. Open a fresh Command Prompt and run `pip install ai-execution-firewall` again.
+2. **Skip Python entirely.** Download `guard-windows.exe` from the [latest release](https://github.com/Shahriyar-Khan27/ai_firewall/releases/latest) and put it on `PATH`. Run `guard --version` to confirm. The standalone binary bundles its own interpreter and is unaffected by host Python issues. The VS Code extension picks it up via the `aiFirewall.guardPath` setting.
+
+The same fix applies on Linux and macOS when `pip` reports `libpython3.X.so` or `libpython3.X.dylib` cannot be found.
+
+### `guard` is not on PATH after install
+
+`pip install ai-execution-firewall` installs `guard` into the active Python's `Scripts/` directory (Windows) or `bin/` directory (POSIX). On user-scoped installs without `--user-base` adjustments, that directory may not be on `PATH`. Run `python -m ai_firewall.cli.main --help` to confirm the package itself is installed; if that works, add the `Scripts/` (or `bin/`) directory to `PATH`, use a virtual environment, or use the standalone binary.
+
 ## Smart-flow approval pipeline (v0.3.0)
 
 Earlier versions prompted on every risky action and produced approval fatigue. v0.3.0 replaces the single-prompt model with a layered pipeline that becomes progressively quieter as it learns the operator's patterns:
