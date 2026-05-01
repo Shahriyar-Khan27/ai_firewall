@@ -69,3 +69,9 @@ api_write:
 api_destructive:
   # DELETE — always confirm, even to "safe" hosts.
   require_approval: true
+
+network_egress:
+  # Raw-socket / file-transfer egress (`nc`, `telnet`, `socat`, `scp`, `rsync`,
+  # `sftp`, `ftp`). The firewall can't inspect what flows through a raw socket
+  # the way it can for HTTP, so we always confirm.
+  require_approval: true

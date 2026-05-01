@@ -95,6 +95,48 @@ def eval(
 
 
 @cli.command()
+def scan(
+    text: str = typer.Argument(..., help="Text to scan for leaked secrets and PII."),
+    json_output: bool = typer.Option(False, "--json", help="Emit findings as JSON instead of human-readable lines."),
+):
+    """Scan text for leaked secrets and PII (emails, SSNs, credit cards, IBANs, …).
+
+    Useful as a paste-time check: did I just put a real key into a chat box?
+    Exits 0 on clean / minor; exits 1 on major / critical.
+    """
+    from ai_firewall.engine import pii_scan, secret_scan
+
+    sec = secret_scan.scan(text)
+    pii = pii_scan.scan(text)
+    all_findings = list(sec.findings) + list(pii.findings)
+    severity = sec.severity if _sev_rank(sec.severity) >= _sev_rank(pii.severity) else pii.severity
+
+    if json_output:
+        typer.echo(json.dumps({"severity": severity, "findings": all_findings}, indent=2))
+    else:
+        if not all_findings:
+            typer.echo("clean — no secrets or PII detected.")
+        else:
+            typer.secho(f"severity: {severity}", fg=_sev_colour(severity), bold=True)
+            for f in all_findings:
+                typer.echo(f"  - {f}")
+    raise typer.Exit(code=0 if severity in ("none", "minor") else 1)
+
+
+def _sev_rank(s: str) -> int:
+    return {"none": 0, "minor": 1, "major": 2, "critical": 3}.get(s, 0)
+
+
+def _sev_colour(s: str) -> str:
+    return {
+        "critical": typer.colors.RED,
+        "major": typer.colors.YELLOW,
+        "minor": typer.colors.CYAN,
+        "none": typer.colors.GREEN,
+    }.get(s, typer.colors.WHITE)
+
+
+@cli.command()
 def wrap(
     argv: list[str] = typer.Argument(..., help="Argv form. Use `--` before the command to disambiguate."),
     rules: Optional[Path] = typer.Option(None, "--rules"),

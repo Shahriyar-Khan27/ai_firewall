@@ -65,6 +65,11 @@ def _base_score(intent: IntentType, flags: dict[str, bool]) -> RiskLevel:
     if intent is IntentType.API_DESTRUCTIVE:
         return RiskLevel.HIGH
 
+    if intent is IntentType.NETWORK_EGRESS:
+        # Raw-socket / file-transfer egress — never benign in an AI agent's
+        # hands; can't be inspected the way HTTP can.
+        return RiskLevel.HIGH
+
     return RiskLevel.MEDIUM
 
 
@@ -98,6 +103,12 @@ def apply_impact(base: RiskLevel, impact: Impact) -> RiskLevel:
             "non-HTTP scheme",
             "destructive-sounding URL path",
             "possible secret in payload",
+            # SBOM signals:
+            "possible typosquat",
+            # PII signals (DLP):
+            "PII: email",
+            "PII: phone",
+            "PII: high-entropy",
         )
         critical_signals = (
             "DROP DATABASE",
@@ -106,6 +117,11 @@ def apply_impact(base: RiskLevel, impact: Impact) -> RiskLevel:
             "UPDATE without WHERE",
             "cloud metadata endpoint",
             "high-confidence secret leak",
+            "not found on",                # unknown package = likely hallucinated
+            # PII signals (DLP):
+            "PII: US SSN",
+            "PII: credit-card",
+            "PII: IBAN",
         )
         for finding in impact.code_findings:
             if any(sig in finding for sig in critical_signals):

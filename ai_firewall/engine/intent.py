@@ -22,6 +22,12 @@ _SHELL_WRITE_HINTS = (">", ">>", "tee")
 _SHELL_READ_CMDS = {"cat", "less", "more", "head", "tail", "type"}
 _CODE_FILE_EXTS = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb", ".c", ".cpp", ".h")
 
+# Egress verbs — shell commands that issue HTTP requests (treated as API_*
+# matching the verb's HTTP method) vs. open raw network sockets (NETWORK_EGRESS).
+_HTTP_EGRESS_VERBS = {"curl", "wget", "httpie", "http", "https", "fetch"}
+_RAW_NETWORK_VERBS = {"nc", "ncat", "telnet", "socat"}
+_FILE_TRANSFER_VERBS = {"scp", "rsync", "sftp", "ftp"}
+
 # Ordering used to pick the "worst" intent across multi-command shell input.
 # Higher rank = more dangerous; higher rank wins.
 _INTENT_RANK = {
@@ -37,7 +43,36 @@ _INTENT_RANK = {
     IntentType.API_READ: 1,
     IntentType.API_WRITE: 3,
     IntentType.API_DESTRUCTIVE: 5,
+    IntentType.NETWORK_EGRESS: 5,
 }
+
+
+_URL_RE = re.compile(r"https?://[^\s\"'`]+")
+
+
+def _http_method_from_curl_args(args: list[str]) -> str:
+    """Inspect curl/wget args and infer the HTTP method (default GET)."""
+    for i, tok in enumerate(args):
+        # curl: `-X METHOD` or `--request METHOD`
+        if tok in ("-X", "--request") and i + 1 < len(args):
+            return args[i + 1].upper()
+        # curl shortcuts
+        if tok in ("--get", "-G"):
+            return "GET"
+        if tok == "--head" or tok == "-I":
+            return "HEAD"
+        if tok in ("-d", "--data", "--data-raw", "--data-binary", "--form", "-F", "--data-urlencode"):
+            return "POST"  # presence of body data implies POST unless overridden later
+    return "GET"
+
+
+def _extract_egress_url(verb: str, args: list[str]) -> str | None:
+    """Find the first http(s) URL in the args of a curl/wget/etc command."""
+    for tok in args:
+        m = _URL_RE.search(tok)
+        if m:
+            return m.group(0).rstrip(",;)")
+    return None
 
 
 def classify(action: Action) -> IntentType:
@@ -117,6 +152,19 @@ def _classify_shell_tokens(tokens: list[str]) -> IntentType:
 
     if head in _SHELL_DELETE_CMDS:
         return IntentType.FILE_DELETE
+
+    # Egress: HTTP-issuing verbs map to API_*; raw-socket / file-transfer verbs
+    # map to NETWORK_EGRESS regardless of method.
+    if head in _HTTP_EGRESS_VERBS:
+        method = _http_method_from_curl_args(tokens[1:])
+        if method in ("DELETE",):
+            return IntentType.API_DESTRUCTIVE
+        if method in ("POST", "PUT", "PATCH", "MERGE"):
+            return IntentType.API_WRITE
+        return IntentType.API_READ  # GET/HEAD/OPTIONS or no body
+    if head in _RAW_NETWORK_VERBS or head in _FILE_TRANSFER_VERBS:
+        return IntentType.NETWORK_EGRESS
+
     if any(hint in tokens for hint in _SHELL_WRITE_HINTS) or head == "tee":
         return IntentType.FILE_WRITE
     if head in _SHELL_READ_CMDS:

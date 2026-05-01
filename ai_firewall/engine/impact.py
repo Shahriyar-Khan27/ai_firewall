@@ -10,10 +10,13 @@ from ai_firewall.engine import (
     code_analysis,
     diff as diff_mod,
     git_check,
+    package_registry,
+    pii_scan,
     secret_scan,
     sql_analysis,
     url_analysis,
 )
+from ai_firewall.parser.shell_ast import parse as parse_shell_ast
 
 _POSIX_SHLEX = os.name != "nt"
 
@@ -75,10 +78,99 @@ def estimate(action: Action, intent: IntentType, *, base_cwd: Path | None = None
     if intent in (IntentType.DB_READ, IntentType.DB_WRITE, IntentType.DB_DESTRUCTIVE):
         return _db_impact(action)
 
+    # Shell actions get the SBOM + egress impact regardless of which intent
+    # the AST classifier picked (curl is API_READ but action.type is "shell";
+    # we still want url_analysis findings on the curl URL).
+    if action.type == "shell":
+        return _shell_impact(action)
+
     if intent in (IntentType.API_READ, IntentType.API_WRITE, IntentType.API_DESTRUCTIVE):
         return _api_impact(action)
 
+    if intent is IntentType.NETWORK_EGRESS and action.type == "shell":
+        return _shell_impact(action)
+
     return Impact(notes="impact not modelled for this intent")
+
+
+def _shell_impact(action: Action) -> Impact:
+    """Surface SBOM and egress findings for shell commands.
+
+    Two channels:
+      - `pip / npm / yarn / cargo / gem install <pkg>` → registry validation
+      - `curl / wget <URL>` → run the URL through url_analysis (same gate as `guard api`)
+    """
+    cmd = (action.payload.get("cmd") or "").strip()
+    if not cmd:
+        return Impact()
+
+    parsed = parse_shell_ast(cmd)
+    findings: list[str] = []
+    paths: list[str] = []
+
+    for ec in parsed.commands:
+        verb = (ec.verb or "").lower()
+        args_list = list(ec.args)
+
+        # SBOM channel
+        manager, packages = package_registry.extract_packages(ec.verb, args_list)
+        if manager and packages:
+            for pkg in packages:
+                paths.append(f"{manager}:{pkg}")
+                try:
+                    result = package_registry.verify(pkg, manager)
+                except Exception:
+                    continue
+                if result.typosquat_of:
+                    findings.append(
+                        f"package install: '{pkg}' is one edit away from popular package "
+                        f"'{result.typosquat_of}' (possible typosquat / hallucinated name)"
+                    )
+                elif result.checked and not result.exists:
+                    findings.append(
+                        f"package install: '{pkg}' not found on {manager} registry "
+                        f"(hallucinated name?)"
+                    )
+            continue
+
+        # Egress channel: curl / wget / etc.
+        from ai_firewall.engine.intent import (
+            _HTTP_EGRESS_VERBS,
+            _RAW_NETWORK_VERBS,
+            _FILE_TRANSFER_VERBS,
+            _extract_egress_url,
+            _http_method_from_curl_args,
+        )
+        if verb in _HTTP_EGRESS_VERBS:
+            url = _extract_egress_url(verb, args_list)
+            if url:
+                method = _http_method_from_curl_args(args_list)
+                paths.append(f"{method} {url}")
+                a = url_analysis.analyze(method, url)
+                findings.extend(a.findings)
+            else:
+                findings.append(f"egress: {verb} called without an http(s) URL — possibly using stdin / config")
+            continue
+
+        if verb in _RAW_NETWORK_VERBS or verb in _FILE_TRANSFER_VERBS:
+            target = " ".join(args_list[:4])
+            paths.append(f"{verb} {target}")
+            findings.append(
+                f"raw network egress: `{verb}` opens a non-HTTP socket — bypasses url_analysis gating"
+            )
+            continue
+
+    if not findings and not paths:
+        return Impact()
+
+    notes = ", ".join(paths[:6]) if paths else ""
+    return Impact(
+        files_affected=0,
+        bytes_affected=0,
+        paths=tuple(paths[:8]),
+        notes=notes,
+        code_findings=tuple(findings),
+    )
 
 
 def _api_impact(action: Action) -> Impact:
@@ -102,6 +194,10 @@ def _api_impact(action: Action) -> Impact:
     if scan_target:
         sec = secret_scan.scan(scan_target)
         findings.extend(sec.findings)
+        # DLP: PII scanner runs on the same text. Findings phrased "PII: ..."
+        # so risk.apply_impact can route them via the existing major/critical signal lists.
+        pii = pii_scan.scan(scan_target)
+        findings.extend(pii.findings)
 
     return Impact(
         files_affected=0,

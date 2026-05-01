@@ -1,0 +1,79 @@
+{
+  "//": "Frozen list of popular packages per registry. Used by package_registry._typosquat_of() to flag one-edit-distance squats. Updated periodically by hand.",
+
+  "pypi": [
+    "requests", "urllib3", "boto3", "botocore", "numpy", "pandas", "scipy",
+    "matplotlib", "scikit-learn", "tensorflow", "torch", "torchvision",
+    "django", "flask", "fastapi", "starlette", "pydantic", "sqlalchemy",
+    "pyyaml", "click", "typer", "rich", "tqdm", "loguru",
+    "pytest", "pytest-mock", "pytest-cov", "tox", "coverage",
+    "openai", "anthropic", "langchain", "llama-index", "huggingface-hub",
+    "transformers", "datasets", "accelerate", "bitsandbytes",
+    "beautifulsoup4", "lxml", "selenium", "playwright", "scrapy",
+    "redis", "psycopg2", "psycopg2-binary", "pymongo", "asyncpg",
+    "celery", "kombu", "billiard", "amqp",
+    "cryptography", "pyjwt", "passlib", "bcrypt", "argon2-cffi",
+    "pillow", "opencv-python", "imageio", "scikit-image",
+    "aiohttp", "httpx", "websockets", "uvicorn", "gunicorn", "hypercorn",
+    "wheel", "setuptools", "pip", "build", "twine", "pyinstaller",
+    "black", "ruff", "isort", "flake8", "mypy", "pyright", "pylint",
+    "jupyter", "ipython", "ipykernel", "notebook", "jupyterlab",
+    "boto", "google-cloud-storage", "azure-storage-blob",
+    "stripe", "paypalrestsdk",
+    "discord.py", "slack-sdk", "tweepy",
+    "marshmallow", "attrs", "dataclasses-json", "msgpack",
+    "python-dateutil", "pytz", "arrow", "pendulum",
+    "sqlglot", "bashlex", "mcp"
+  ],
+
+  "npm": [
+    "react", "react-dom", "next", "vue", "angular", "@angular/core",
+    "express", "koa", "fastify", "nestjs", "@nestjs/core",
+    "lodash", "underscore", "ramda", "moment", "dayjs", "date-fns",
+    "axios", "node-fetch", "got", "request", "superagent",
+    "chalk", "commander", "yargs", "inquirer", "ora", "kleur",
+    "webpack", "rollup", "vite", "esbuild", "parcel", "turbo",
+    "babel", "@babel/core", "@babel/preset-env",
+    "typescript", "ts-node", "tsx", "tsc-watch",
+    "eslint", "prettier", "stylelint", "husky", "lint-staged",
+    "jest", "mocha", "chai", "vitest", "playwright", "cypress",
+    "react-router", "react-router-dom", "redux", "@reduxjs/toolkit", "mobx",
+    "tailwindcss", "postcss", "autoprefixer", "sass", "less",
+    "socket.io", "ws", "graphql", "@apollo/client", "@apollo/server",
+    "openai", "@anthropic-ai/sdk", "langchain", "@langchain/core",
+    "passport", "jsonwebtoken", "bcrypt", "bcryptjs", "argon2",
+    "mongoose", "sequelize", "typeorm", "prisma", "@prisma/client",
+    "redis", "ioredis", "kafkajs", "amqplib",
+    "pino", "winston", "bunyan", "morgan",
+    "uuid", "nanoid", "shortid",
+    "dotenv", "config", "convict",
+    "fs-extra", "globby", "rimraf", "del", "shelljs",
+    "puppeteer", "playwright", "cheerio",
+    "stripe", "paypal-rest-sdk",
+    "@types/node", "@types/react", "@types/express"
+  ],
+
+  "cargo": [
+    "serde", "serde_json", "tokio", "async-trait", "anyhow", "thiserror",
+    "clap", "structopt", "tracing", "log", "env_logger",
+    "reqwest", "hyper", "actix-web", "axum", "warp",
+    "rand", "uuid", "chrono", "regex", "lazy_static", "once_cell",
+    "rayon", "crossbeam", "parking_lot",
+    "diesel", "sqlx", "sea-orm", "rusqlite",
+    "rusoto", "aws-sdk-s3",
+    "tokio-stream", "futures", "futures-util",
+    "wasm-bindgen", "wasmer", "wasmtime",
+    "cargo-edit", "cargo-watch", "cargo-tarpaulin"
+  ],
+
+  "rubygems": [
+    "rails", "activerecord", "activesupport", "actionpack", "actionview",
+    "rake", "bundler", "devise", "puma", "unicorn", "sidekiq",
+    "rspec", "rspec-rails", "minitest", "factory_bot", "faker",
+    "rubocop", "standard", "reek", "brakeman",
+    "pg", "mysql2", "sqlite3", "redis",
+    "nokogiri", "httparty", "rest-client", "faraday",
+    "json", "yaml", "byebug", "pry", "pry-byebug",
+    "stripe", "shopify_api"
+  ]
+}
