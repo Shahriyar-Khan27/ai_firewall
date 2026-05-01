@@ -1,154 +1,145 @@
-<div align="center">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Shahriyar-Khan27/ai_firewall/main/vscode-extension/icon.png" alt="AI Execution Firewall" width="128" height="128" />
+</p>
 
-<img src="icon.png" alt="AI Execution Firewall" width="128" height="128" />
+<h1 align="center">AI Execution Firewall</h1>
 
-# AI Execution Firewall — VS Code Extension
+<p align="center"><strong>The in-editor approval surface for the AI Execution Firewall.</strong></p>
 
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/sk-dev-ai.ai-execution-firewall.svg?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/sk-dev-ai.ai-execution-firewall.svg)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/Shahriyar-Khan27/ai_firewall?style=social)](https://github.com/Shahriyar-Khan27/ai_firewall)
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall"><img src="https://vsmarketplacebadges.dev/version-short/sk-dev-ai.ai-execution-firewall.png?label=VS%20Marketplace" alt="VS Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall"><img src="https://vsmarketplacebadges.dev/installs-short/sk-dev-ai.ai-execution-firewall.png" alt="Installs"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Shahriyar-Khan27/ai_firewall"><img src="https://img.shields.io/github/stars/Shahriyar-Khan27/ai_firewall?style=social" alt="GitHub stars"></a>
+</p>
 
-**Open source (MIT) — built in the open. Issues, PRs, and ideas all welcome on [GitHub](https://github.com/Shahriyar-Khan27/ai_firewall).**
+---
 
-</div>
+This extension is the in-editor approval surface for the [AI Execution Firewall](https://github.com/Shahriyar-Khan27/ai_firewall): a deterministic policy gate that sits between AI coding agents (Claude Code, Cursor, Copilot, Continue, Cline, Zed) and the host system. It does not re-implement policy logic. It shells out to the `guard` Python CLI and renders the resulting Decision in a themed approval webview with the risk badge, findings, git context, and a syntax-coloured unified diff.
 
-In-editor approval UI for the [AI Execution Firewall](https://github.com/Shahriyar-Khan27/ai_firewall). Gate AI-generated **shell commands, file edits, SQL queries, and HTTP requests** before they execute — see the risk, findings, git context, and unified diff in a webview, then click Approve or Reject. Smart-flow auto-approves routine work silently.
+## Features
 
-```
-VS Code command  →  guard eval  →  Decision  →  webview prompt  →  guard run --auto-approve
-```
+**Approval webview**
 
-The extension never re-implements policy logic — it surfaces what the Python `guard` CLI returns.
+Risky actions raised by AI agents (or by the operator running `guard run`) open a themed webview containing the risk badge, intent and decision pills, the findings list, git context (uncommitted, untracked, gitignored markers), and a syntax-coloured unified diff. The operator selects Approve or Reject; the response is recorded in the audit log and, on Approve, in pattern memory so future identical actions auto-approve.
 
-## What's new in v0.5.0
+**Auto-detect and one-notification setup**
 
-The "active interceptor" release. The extension stops being a passive
-Command-Palette tool and becomes the gate for the AI tools running
-alongside it.
+On first activation, the extension shells out to `guard mcp scan --json` and reads `~/.claude/settings.json` to enumerate every AI tool already configured on the host. A single non-modal notification offers Wire All, Pick, or Not Now. Wiring installs the Claude Code PreToolUse hook and runs `guard mcp install` for each detected MCP server. From that point, any agent action that hits REQUIRE_APPROVAL opens the approval webview automatically; no manual command invocation is required.
 
-- **Auto-detect on first activation.** On startup we shell out to
-  `guard mcp scan --json`, summarise what's unwrapped (Claude Code
-  PreToolUse hook missing + per-host MCP server count), and show a
-  non-modal toast: **[Wire All] [Pick…] [Not Now]**. The "Pick…"
-  fallback opens a multi-select QuickPick. Dismissals are remembered
-  per-fingerprint via globalState — adding a new MCP server re-arms
-  the prompt automatically.
-- **Localhost approval server.** When an AI tool tries something
-  REQUIRE_APPROVAL hits, the firewall's hook routes the Decision to a
-  127.0.0.1 endpoint the extension binds (token-authenticated via
-  `~/.ai-firewall/extension.port`). The existing webview pops up; the
-  user clicks Approve / Reject. AI is paused ≤30s waiting; on timeout
-  the hook falls back to safe-default BLOCK. No more silent auto-deny
-  on REQUIRE_APPROVAL.
-- **Show Status** — markdown preview combining the wired hosts, the
-  approval-server port, and the last 20 audit records.
-- **Detect & Wire AI Tools** / **Unwire All AI Tools** — re-arm or
-  reverse the auto-wire flow on demand.
-- **Decision toasts** — every Approve/Reject from the loopback flow
-  drops a 6-second status-bar message so the firewall's actions never
-  feel invisible.
+**Active interception via a localhost handshake**
 
-## What's new in v0.4.1
+The extension binds a token-authenticated HTTP endpoint on `127.0.0.1` and publishes the port at `~/.ai-firewall/extension.port`. The Claude Code PreToolUse hook and the MCP transparent proxy POST REQUIRE_APPROVAL decisions to that endpoint and block for up to thirty seconds for the operator's response. On timeout, the call falls back to a safe-default BLOCK. The endpoint is closed and the port file removed when the extension deactivates.
 
-Patch release tracking the Python CLI. The extension itself is unchanged, but the underlying `guard scan` now reads from stdin when called with `-` or no positional argument — which makes the **Scan Text for Secrets and PII…** input-box flow more robust for very long pastes on Windows (no more PowerShell quoting edge cases on multi-line content).
+**Smart-flow auto-approvals**
 
-## What's new in v0.4.0
+Routine work passes silently. When the firewall auto-approves an action via memory (a previously-approved equivalent in the same project) or inheritance (the operator just ran the same command in the host shell), a status-bar message confirms the auto-approval without opening the webview.
 
-The "enterprise round" of the underlying firewall — seven additions that move it from "useful CLI" to "deployable in a regulated org" — surface in the extension as four new Command Palette entries:
+**Paste-time DLP and SBOM checks**
 
-- **Scan Text for Secrets and PII…** / **Scan Selection for Secrets and PII** — paste-time DLP. Run any text through the firewall's combined secret + PII scanner (emails, US SSN, Luhn-validated credit cards, E.164 / US phone, IBAN, AWS / GitHub / Slack / Stripe / Anthropic / OpenAI tokens, PEM keys, JWTs, high-entropy fallbacks). Clean text gets a quiet info toast; major / critical findings open a preview document with severity + per-finding lines.
-- **Show Governance Status** — opens a preview document with current rate-limit counters per intent, loop-detection settings, and 24h API byte spend (mirrors `guard governance status`).
-- **Show Behavior Status** — current per-intent burst counts plus configured anomaly thresholds (rate burst, last-hour spike vs 24h median, quiet-hour outlier guards). Mirrors `guard behavior status`.
+The Command Palette exposes paste-time scanners. **Scan Text for Secrets and PII** and **Scan Selection for Secrets and PII** run text through the firewall's combined secret and PII scanner before the operator pastes it into a chat, log, or ticket. AI-SBOM validation against PyPI, npm, crates.io, and RubyGems is enforced automatically when the AI issues an install command via Run Shell Command.
 
-Under the hood, the underlying CLI now also enforces **AI-SBOM** validation on `pip install` / `npm install` / `cargo install` / `gem install` (catches typosquats and hallucinated package names), **network egress control** (`curl` / `wget` / `nc` / `socat` route through the same gate as `guard api`), and **fine-grained RBAC** (per-role intent / file-glob / MCP-tool deny lists from `~/.ai-firewall/guard.toml`). Audit records can also broadcast to **SIEM sinks** (syslog / Splunk HEC / generic HTTPS webhook / stdout).
+**Status surfaces**
 
-## What's new in v0.3.0
+**Show Status**, **Show Governance Status**, and **Show Behavior Status** render markdown previews of the wired hosts, the approval-server port, the last twenty audit decisions, the current rate-limit counters, the 24-hour API byte spend, and the configured anomaly thresholds.
 
-- **Smart-flow status-bar toasts** — when the firewall auto-approves an action via *memory* (you've approved this kind of thing before in this project) or *inheritance* (you just typed an equivalent command in your own terminal), a quiet 4-second status-bar message surfaces what happened. No webview, no friction. Approval fatigue solved.
-- **Show Recent Secret-DB Activity** — a new command that opens a webview log of writes to your editor's `state.vscdb` (Code / Cursor). Detection-only — the firewall doesn't patch fs.readFile or interfere with other extensions, but you finally have a forensic trail if something siphons API keys.
-- **Tighter pipeline** — the underlying `guard` CLI now uses a real bashlex AST. Obfuscated commands like `echo "<base64>" | base64 -d | sh` are decoded and the inner `rm -rf /` is what gets policy-checked.
+**Passive secret-DB watcher**
 
-See the project [CHANGELOG](https://github.com/Shahriyar-Khan27/ai_firewall/blob/main/CHANGELOG.md) for the full list.
+A `FileSystemWatcher` on the editor's `state.vscdb` detects writes to the editor's secret store. Detection-only; the extension does not patch `fs.readFile` or interfere with other extensions. **Show Recent Secret-DB Activity** opens a read-only webview listing recent writes.
 
-## Install
+## Quick start
 
-> **VS Code → Extensions panel → search "AI Execution Firewall" → Install**
+1. Install the extension from the Marketplace (or `code --install-extension sk-dev-ai.ai-execution-firewall`).
+2. Install the `guard` Python CLI (see [Requirements](#requirements)).
+3. Reload VS Code. The extension detects configured AI tools and offers a single notification to wire firewall protection. Click **Wire All**.
 
-Or from the command line:
+From this point, AI tool actions that the firewall flags as REQUIRE_APPROVAL open the approval webview automatically. Run `guard run "<command>"` from the integrated terminal to evaluate ad-hoc commands through the same policy pipeline.
+
+## Requirements
+
+The extension requires the `guard` Python CLI on PATH:
 
 ```bash
-code --install-extension sk-dev-ai.ai-execution-firewall
+pip install ai-execution-firewall    # version 0.5.0 or later
+guard --help                          # confirm the CLI resolves
 ```
 
-## Prerequisites
+A standalone PyInstaller binary is published with each GitHub release for environments without Python. Download `guard-{linux,macos,macos-arm64,windows}` from the [latest release](https://github.com/Shahriyar-Khan27/ai_firewall/releases/latest) and place it on PATH.
 
-The extension requires the [`guard` Python CLI](https://pypi.org/project/ai-execution-firewall/) on PATH:
+If the `guard` executable is not on PATH (for example, installed inside a virtualenv), set the absolute path in **Settings → AI Firewall: Guard Path**, e.g. `C:/Users/you/.venv/Scripts/guard.exe`.
 
-```bash
-pip install ai-execution-firewall    # 0.4.0+ required for scan / governance / behavior commands
-guard --help                          # confirm it's available
-```
+## Useful commands
 
-Or grab a [standalone binary](https://github.com/Shahriyar-Khan27/ai_firewall/releases/latest) (no Python required) and put it on your PATH.
+All commands are registered under the `AI Firewall:` prefix in the Command Palette (Ctrl+Shift+P).
 
-If `guard` isn't on PATH (e.g. installed inside a virtualenv), set the absolute path in **Settings → AI Firewall: Guard Path**, e.g. `C:/Users/you/.venv/Scripts/guard.exe`.
-
-## Commands
-
-All under the `AI Firewall:` prefix in the Command Palette (Ctrl+Shift+P):
-
-| Command | What it does |
+| Command | Description |
 |---|---|
-| **Run Shell Command…** | Prompt for a shell command, evaluate, open approval webview if needed, execute via `guard run --auto-approve` on accept. |
-| **Evaluate Selected Text as Shell Command** | Same flow, using the editor's current selection as the command. |
-| **Evaluate SQL Query…** | Prompt for SQL, evaluate with `sqlglot`. Risky queries (DELETE without WHERE, DROP DATABASE, …) trigger the approval webview. Analyze-only — never touches a real DB. |
-| **Evaluate Selected Text as SQL** | Same SQL flow, using the editor's selection. |
-| **Evaluate HTTP Request…** | Pick HTTP method (GET / POST / PUT / PATCH / DELETE / …), enter URL. Detects SSRF, cloud-metadata endpoints, URL credentials, leaked secrets in body / Authorization headers. Analyze-only — never makes the request. |
-| **Show Effective Policy** | Open the merged YAML rules in a preview tab. |
-| **Show Recent Secret-DB Activity** *(0.3.0)* | Open a read-only webview listing recent writes to your editor's `state.vscdb` so you can spot extensions that read your secrets. |
-| **Scan Text for Secrets and PII…** *(new in 0.4.0)* | Paste any text into an input box; the firewall's combined secret + PII scanner returns a severity ladder + per-finding list. Useful as a paste-time check before pasting code or logs into an external tool. |
-| **Scan Selection for Secrets and PII** *(new in 0.4.0)* | Same scan, run against the active editor's current selection. |
-| **Show Governance Status** *(new in 0.4.0)* | Preview document with current rate-limit counters per intent, loop-detection settings, and 24h API byte spend. |
-| **Show Behavior Status** *(new in 0.4.0)* | Configured anomaly thresholds (rate burst, last-hour spike vs 24h median, quiet-hour guards) alongside current per-intent burst counts. |
+| Run Shell Command | Prompt for a shell command, evaluate it, open the approval webview if needed, then execute via `guard run --auto-approve` on accept. |
+| Evaluate Selected Text as Shell Command | The same flow, using the editor's current selection as the command. |
+| Evaluate SQL Query | Prompt for SQL and evaluate via `sqlglot`. Risky queries (DELETE without WHERE, DROP DATABASE, and similar) trigger the approval webview. Analyze-only; never opens a database connection. |
+| Evaluate Selected Text as SQL | The same SQL flow on the editor's selection. |
+| Evaluate HTTP Request | Pick an HTTP method, enter a URL. Detects SSRF, cloud-metadata endpoints, URL credentials, and leaked secrets in body or Authorization headers. Analyze-only; never issues the request. |
+| Show Effective Policy | Open the merged YAML rules in a preview tab. |
+| Show Recent Secret-DB Activity | Open a read-only webview listing recent writes to the editor's `state.vscdb`. |
+| Scan Text for Secrets and PII | Paste any text into an input box. The combined secret and PII scanner returns a severity ladder plus per-finding lines. |
+| Scan Selection for Secrets and PII | The same scan applied to the editor's current selection. |
+| Show Governance Status | Preview document with current rate-limit counters per intent, loop-detection settings, and the 24-hour API byte spend. |
+| Show Behavior Status | Configured anomaly thresholds and current per-intent burst counts. |
+| Detect & Wire AI Tools | Re-arm and re-run the auto-detect flow, including any AI tools configured since the last scan. |
+| Unwire All AI Tools | Reverse the auto-wire integration. Modal confirmation; removes the Claude Code PreToolUse hook and unwraps every wrapped MCP server. |
+| Show Status | Markdown summary of currently wired hosts, the approval-server port, and the last twenty audit decisions. |
 
-A status bar item (`🛡️ Firewall`, bottom-left) is a one-click shortcut to **Run Shell Command…**.
+A status-bar item (`🛡️ Firewall`, bottom-left) is a one-click shortcut to **Run Shell Command**.
 
-## Demo flow
-
-After install + `pip install ai-execution-firewall`, try these in the Command Palette:
-
-| Action type | Input | Expected outcome |
-|---|---|---|
-| Shell | `echo hello` | ALLOW — runs immediately, output streams to the **AI Firewall** output channel |
-| Shell | `rm -rf /` | BLOCK — red error toast, no execution |
-| Shell | `rm ./tmp.txt` (file exists) | REQUIRE_APPROVAL — webview opens with risk badge, file count, Approve / Reject |
-| Shell | obfuscated `echo "cm0gLXJmIC8=" \| base64 -d \| sh` | BLOCK — decoded as `rm -rf /` (semantic parser caught it) |
-| Shell | repeat of an earlier-approved `npm run build` | ALLOW silently — *"auto-approved (learned from you)"* status-bar toast |
-| SQL | `DELETE FROM users` | REQUIRE_APPROVAL — CRITICAL (no WHERE), shown in webview with the finding |
-| SQL | `DROP DATABASE prod` | BLOCK — red toast, never reaches an adapter |
-| HTTP | `GET http://169.254.169.254/` | REQUIRE_APPROVAL — CRITICAL (cloud metadata SSRF) |
-| Scan | `my SSN is 123-45-6789` | severity CRITICAL — finding "PII: US SSN" *(0.4.0)* |
-| Scan | `pip install requets` *(via Run Shell)* | BLOCK — possible typosquat of `requests` *(0.4.0 SBOM)* |
-
-## Settings
+## Extension settings
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `aiFirewall.guardPath` | `guard` | Absolute path to the `guard` CLI. Set this if it's not on PATH. |
-| `aiFirewall.rulesPath` | _(empty)_ | Custom rules YAML; empty = shipped defaults. |
-| `aiFirewall.auditPath` | _(empty)_ | Audit log JSONL location; empty = `./logs/audit.jsonl`. |
+| `aiFirewall.guardPath` | `guard` | Absolute path to the `guard` CLI. Set when the executable is not on PATH (for example, inside a virtualenv). |
+| `aiFirewall.rulesPath` | (empty) | Path to a custom rules YAML file. Empty falls back to the shipped defaults. |
+| `aiFirewall.auditPath` | (empty) | Path to the audit JSONL log. Empty falls back to `./logs/audit.jsonl`. |
 
-## Architecture
+## Example flow
 
-- **`src/firewall.ts`** — spawns the `guard` CLI as a subprocess (`guard eval`, `guard run`, `guard sql`, `guard api`), parses the Decision JSON.
-- **`src/webview.ts`** — renders the approval UI: risk badge, intent / decision pills, findings list, git context, unified diff with syntax colours.
-- **`src/secret_watcher.ts`** *(new in 0.3.0)* — passive `FileSystemWatcher` on the editor's secret-store DB. Detection-only.
-- **`src/extension.ts`** — registers commands around an `ActionRunner` interface so shell / SQL / HTTP share one `evaluate → approve → run` pipeline. Streams output to the **AI Firewall** output channel and toasts smart-flow auto-approvals to the status bar.
+| Action type | Input | Outcome |
+|---|---|---|
+| Shell | `echo hello` | ALLOW. Output streams to the AI Firewall output channel. |
+| Shell | `rm -rf /` | BLOCK. Surfaced as a red error notification; no execution. |
+| Shell | `rm ./tmp.txt` (file exists) | REQUIRE_APPROVAL. Webview opens with the risk badge, file count, and Approve / Reject controls. |
+| Shell | Obfuscated `echo "cm0gLXJmIC8=" \| base64 -d \| sh` | BLOCK. Decoded as `rm -rf /` by the bashlex AST and obfuscation decoders. |
+| Shell | Repeat of a previously-approved `npm run build` | ALLOW silently. Status-bar message confirms the auto-approval came from memory. |
+| SQL | `DELETE FROM users` | REQUIRE_APPROVAL. CRITICAL (no WHERE clause). Finding shown in the webview. |
+| SQL | `DROP DATABASE prod` | BLOCK. Never reaches an adapter. |
+| HTTP | `GET http://169.254.169.254/` | REQUIRE_APPROVAL. CRITICAL (cloud metadata endpoint, SSRF vector). |
+| Scan | `my SSN is 123-45-6789` | Severity CRITICAL. Finding "PII: US SSN". |
+| Scan | `pip install requets` (via Run Shell Command) | BLOCK. Possible typosquat of `requests`. |
 
-The extension surfaces whatever `code_findings` the Python pipeline emits, so SQL warnings, AST findings, git context, URL / secret findings all render through the same webview without per-type UI code.
+## Known issues
 
-## For contributors — build from source
+- The Marketplace listing's contributor sidebar may show a stale entry after a recent history rewrite. GitHub's contributor-graph cache typically refreshes within a few weeks; the extension itself is unaffected.
+- The current detection of MCP host configurations covers Claude Code, Cursor, Continue, and any workspace `.mcp.json`. Aider, Cline, and Zed have evolving config layouts and are best supported by community pull requests against `ai_firewall/discovery/mcp_detector.py`.
+
+## Release notes
+
+For the full release-by-release feature list, see the project [CHANGELOG](https://github.com/Shahriyar-Khan27/ai_firewall/blob/main/CHANGELOG.md). Recent highlights:
+
+**0.5.0** Active interceptor. Auto-detect of AI tools on first activation; one-notification wire-up of the Claude Code PreToolUse hook and every detected MCP server. Localhost approval server replaces the previous silent auto-deny on REQUIRE_APPROVAL with the existing webview prompt. New commands: Detect & Wire AI Tools, Unwire All AI Tools, Show Status.
+
+**0.4.0** Extension surfaces the firewall's enterprise-round capabilities. New commands: Scan Text for Secrets and PII, Scan Selection for Secrets and PII, Show Governance Status, Show Behavior Status. Underlying CLI gains AI-SBOM validation, network egress control, fine-grained RBAC, and SIEM-ready audit sinks.
+
+**0.3.0** Smart-flow status-bar messages replace approval prompts for routine work. New command: Show Recent Secret-DB Activity. The underlying CLI moves to a real bashlex AST so obfuscated commands are decoded before policy evaluation.
+
+## Questions, issues, and contributions
+
+The extension is open source under the MIT license alongside the Python firewall it gates. The full project lives at <https://github.com/Shahriyar-Khan27/ai_firewall>.
+
+- **Bug reports and feature requests**: <https://github.com/Shahriyar-Khan27/ai_firewall/issues>
+- **Security findings**: please use [GitHub Security advisories](https://github.com/Shahriyar-Khan27/ai_firewall/security/advisories/new) rather than the public issues tracker.
+- **Source for build, debug, and packaging instructions**: see [vscode-extension/](https://github.com/Shahriyar-Khan27/ai_firewall/tree/main/vscode-extension) and the project README's Release flow section.
+
+Areas where contributions are most welcome: new host detectors (Aider, Cline, Zed), approval webview polish (diff rendering, accessibility, keyboard shortcuts), and translations of webview copy.
+
+## Build from source
 
 ```bash
 git clone https://github.com/Shahriyar-Khan27/ai_firewall.git
@@ -157,46 +148,14 @@ npm install
 npm run compile
 ```
 
-Open the `vscode-extension/` folder in VS Code and press **F5** to launch an Extension Development Host with the local build loaded.
+Open the `vscode-extension/` folder in VS Code and press **F5** to launch an Extension Development Host with the local build.
 
-To produce an installable `.vsix` (e.g. for sideloading or Marketplace re-publish):
+To produce an installable `.vsix`:
 
 ```bash
 npx vsce package --no-yarn
 ```
 
-## Contributing
-
-<img src="icon.png" alt="" width="64" height="64" align="left" hspace="12" />
-
-This extension is fully open source under the MIT license alongside the Python firewall it gates. The whole project lives at <https://github.com/Shahriyar-Khan27/ai_firewall>.
-
-**Where help is most useful:**
-- **New host detectors** — Aider / Cline / Zed / future AI-IDE configs evolve faster than any one maintainer can track. PRs adding detectors to [`ai_firewall/discovery/mcp_detector.py`](https://github.com/Shahriyar-Khan27/ai_firewall/blob/main/ai_firewall/discovery/mcp_detector.py) keep the extension's auto-wire flow useful for everyone.
-- **Approval webview polish** — better diff rendering, dark-theme tweaks, accessibility, keyboard shortcuts — `vscode-extension/src/webview.ts` welcomes contributions.
-- **Translations of webview copy** — currently English-only.
-- **Bug reports + feature requests** — file at <https://github.com/Shahriyar-Khan27/ai_firewall/issues>. Real-world AI-tool screenshots ("here's what Cursor / Continue / Cline did, and how the firewall handled it") are especially valued.
-
-**To build from source:**
-
-```bash
-git clone https://github.com/Shahriyar-Khan27/ai_firewall.git
-cd ai_firewall/vscode-extension
-npm install
-npm run compile
-```
-
-Open `vscode-extension/` in VS Code and press **F5** to launch an Extension Development Host with the local build.
-
-**Star the repo if you find it useful** — it's the simplest way to signal this kind of safety tooling is worth investing in.
-
-## Links
-
-- **Source**: https://github.com/Shahriyar-Khan27/ai_firewall
-- **Issues**: https://github.com/Shahriyar-Khan27/ai_firewall/issues
-- **Python package on PyPI**: https://pypi.org/project/ai-execution-firewall/
-- **CHANGELOG**: [CHANGELOG.md](CHANGELOG.md)
-
 ## License
 
-MIT — see [LICENSE](LICENSE). Free for commercial and personal use.
+MIT. See [LICENSE](LICENSE). Free for commercial and personal use.
