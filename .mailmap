@@ -1,0 +1,4 @@
+# Canonical author identity for `git shortlog -sne` and similar tools.
+# GitHub's Contributors widget does NOT honour this file — it reads commit
+# metadata directly — so this is purely for local-side git tooling.
+Shahriyar Khan <shahriyarofficial86@gmail.com>
