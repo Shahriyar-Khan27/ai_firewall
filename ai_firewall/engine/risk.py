@@ -13,6 +13,17 @@ def score(action: Action, intent: IntentType, flags: dict[str, bool] | None = No
     if flags.get("sudo_or_admin"):
         return RiskLevel.CRITICAL
 
+    # Obfuscated commands (base64 / hex / printf-decoded payloads) get a
+    # baseline HIGH risk regardless of inner intent — even if the decoded
+    # command turned out to be benign, the obfuscation itself is suspicious.
+    obfuscation_baseline = RiskLevel.HIGH if flags.get("obfuscation_detected") else RiskLevel.LOW
+
+    base = _base_score(intent, flags)
+    return RiskLevel(max(base, obfuscation_baseline))
+
+
+def _base_score(intent: IntentType, flags: dict[str, bool]) -> RiskLevel:
+    """Risk based on intent + flags only, before obfuscation baseline applies."""
     if intent is IntentType.FILE_DELETE:
         if flags.get("system_path"):
             return RiskLevel.CRITICAL

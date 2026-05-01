@@ -27,7 +27,9 @@ for _stream in (sys.stdout, sys.stderr):
 
 cli = typer.Typer(help="AI Execution Firewall — gate AI-generated actions before they run.", no_args_is_help=True)
 policy_app = typer.Typer(help="Inspect or validate policy rule files.", no_args_is_help=True)
+audit_app = typer.Typer(help="Inspect and verify the audit JSONL log.", no_args_is_help=True)
 cli.add_typer(policy_app, name="policy")
+cli.add_typer(audit_app, name="audit")
 
 
 def _make_guard(
@@ -214,6 +216,97 @@ def api(
     sys.stdout.write(result.execution.stdout)
     sys.stderr.write(result.execution.stderr)
     raise typer.Exit(code=result.execution.exit_code)
+
+
+@audit_app.command("init-key")
+def audit_init_key(
+    path: Optional[Path] = typer.Option(None, "--path", help="Where to write the key (default: ~/.ai-firewall/audit.key)."),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing key file."),
+):
+    """Generate a fresh HMAC key for signing future audit records."""
+    from ai_firewall.audit.logger import _DEFAULT_KEY_PATH, generate_and_persist_key
+
+    target = path or _DEFAULT_KEY_PATH
+    if target.exists() and not force:
+        typer.secho(
+            f"key already exists at {target} — use --force to overwrite",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(2)
+    written = generate_and_persist_key(target)
+    typer.echo(f"wrote audit HMAC key to {written}")
+    typer.echo("future audit records written by `guard run/sql/api ...` will be HMAC-SHA256 signed.")
+
+
+@audit_app.command("verify")
+def audit_verify(
+    path: Path = typer.Argument(..., exists=True, help="Path to the audit JSONL file."),
+    key_hex: Optional[str] = typer.Option(None, "--key", help="HMAC key (hex). Default: env / ~/.ai-firewall/audit.key."),
+):
+    """Verify every record's HMAC signature in an audit log."""
+    from ai_firewall.audit.verifier import verify
+    key = bytes.fromhex(key_hex) if key_hex else None
+    report = verify(path, key=key)
+    typer.echo(json.dumps({
+        "total": report.total,
+        "valid": report.valid,
+        "unsigned": report.unsigned,
+        "tampered_indices": report.tampered_indices,
+        "malformed_indices": report.malformed_indices,
+        "header_key_fingerprint": report.header_key_fingerprint,
+        "fingerprint_mismatch": report.fingerprint_mismatch,
+        "ok": report.ok,
+    }, indent=2))
+    raise typer.Exit(code=0 if report.ok else 1)
+
+
+@audit_app.command("show")
+def audit_show(
+    path: Path = typer.Argument(..., exists=True, help="Path to the audit JSONL file."),
+    since: Optional[str] = typer.Option(None, "--since", help="Show only records newer than this duration (e.g. 1h, 24h, 7d)."),
+    tampered_only: bool = typer.Option(False, "--tampered-only", help="Show only records that fail HMAC verification."),
+):
+    """Print recent audit records in human-readable form."""
+    from ai_firewall.audit.verifier import verify
+    import re as _re
+    import time as _time
+
+    cutoff = None
+    if since:
+        m = _re.fullmatch(r"(\d+)([smhd])", since.strip().lower())
+        if not m:
+            typer.secho("--since must look like 5m / 2h / 7d", fg=typer.colors.RED, err=True)
+            raise typer.Exit(2)
+        n, unit = int(m.group(1)), m.group(2)
+        seconds = n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+        cutoff = _time.time() - seconds
+
+    report = verify(path) if tampered_only else None
+    tampered_set = set(report.tampered_indices) if report else None
+
+    with path.open("r", encoding="utf-8") as fh:
+        for idx, line in enumerate(fh):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("event") == "init":
+                continue
+            if cutoff and rec.get("ts", 0) < cutoff:
+                continue
+            if tampered_only and idx not in tampered_set:
+                continue
+            ts = rec.get("ts", 0)
+            kind = rec.get("type", "?")
+            decision = rec.get("decision", "?")
+            risk = rec.get("risk", "?")
+            rendered = (rec.get("rendered") or "")[:80]
+            tamper = " [TAMPERED]" if tampered_set and idx in tampered_set else ""
+            typer.echo(f"{_time.strftime('%Y-%m-%d %H:%M:%S', _time.localtime(ts))}  {kind:5}  {decision:18}  {risk:8}  {rendered}{tamper}")
 
 
 @policy_app.command("show")
