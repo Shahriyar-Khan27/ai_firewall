@@ -1,0 +1,110 @@
+name: Bug report
+description: Report a bug or unexpected behaviour in the firewall, the SDK, or the VS Code extension.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. The more concrete you can be about reproduction steps and the AI tool involved, the faster the fix.
+
+        For security-relevant findings (firewall bypasses, regex DoS, prompt-injection that disables a check), please do not file a public issue. Use [GitHub Security advisories](https://github.com/Shahriyar-Khan27/ai_firewall/security/advisories/new) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Run `guard --version`. For VS Code extension issues, also include the extension version from VS Code's Extensions panel.
+      placeholder: "guard 0.5.1; vscode extension 0.5.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does the bug surface?
+      multiple: true
+      options:
+        - guard CLI (guard run / guard eval / guard scan / guard sql / guard api)
+        - Python SDK (Guard / Action)
+        - Claude Code PreToolUse hook
+        - MCP transparent proxy
+        - VS Code extension (approval webview, commands, status bar)
+        - Audit log / SIEM sinks
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai_tool
+    attributes:
+      label: AI tool involved (if any)
+      options:
+        - Not applicable
+        - Claude Code
+        - Cursor
+        - GitHub Copilot
+        - Continue.dev
+        - Cline
+        - Zed
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: A minimal sequence that reproduces the bug. Include the exact command, payload, or VS Code action.
+      placeholder: |
+        1. Run `guard run "..."`
+        2. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: The firewall should have classified this as ... and ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the full error message or Decision JSON if available.
+      placeholder: Paste the output here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: audit_log
+    attributes:
+      label: Audit log excerpt (optional)
+      description: |
+        Run `guard audit show --limit 5 --json` and paste the relevant records. Redact anything sensitive before posting.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else
+      description: Custom rules, RBAC config, network constraints, anything else that might be relevant.
+    validations:
+      required: false

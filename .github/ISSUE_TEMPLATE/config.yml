@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Shahriyar-Khan27/ai_firewall/security/advisories/new
+    about: Found a way to bypass the firewall, a regex DoS in a scanner, a prompt-injection that disables a check, or any other security-relevant finding? Please file a private report via GitHub Security advisories rather than a public issue.
+  - name: Question or general discussion
+    url: https://github.com/Shahriyar-Khan27/ai_firewall/discussions
+    about: For usage questions, integration help, or open-ended ideas, please start a discussion. Issues are reserved for actionable bug reports and feature requests.

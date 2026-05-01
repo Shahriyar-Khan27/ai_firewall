@@ -1,0 +1,76 @@
+name: Feature request
+description: Suggest a new capability, an integration, or an improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature. Concrete proposals (with a problem statement and a sketch of the change) are easier to evaluate than open-ended ideas.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is the user, operator, or maintainer pain that this feature would address? What workflow is currently awkward, missing, or unsafe?
+      placeholder: When my AI agent does X, the firewall currently ..., which means ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: A short description of the change. File paths, function names, or CLI command shapes are welcome.
+      placeholder: |
+        Add a new ... to ... so that ...
+        New CLI: `guard ...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you weighed and ruled out.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface does this affect?
+      multiple: true
+      options:
+        - Detection engine (intent classifier, risk analyzer, scanners)
+        - Policy engine (YAML rules, RBAC, governance)
+        - Adapters (shell, file, db, api)
+        - Audit log / SIEM sinks
+        - guard CLI
+        - Python SDK
+        - Claude Code hook
+        - MCP transparent proxy
+        - VS Code extension
+        - Distribution (PyPI, Marketplace, standalone binary, CI)
+        - Documentation
+    validations:
+      required: true
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Are you willing to implement this?
+      options:
+        - Yes, I plan to open a PR
+        - I could implement it with guidance
+        - No, I am only proposing the idea
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else
+      description: Links to related issues, prior art in other projects, real-world incidents that motivate the feature.
+    validations:
+      required: false
