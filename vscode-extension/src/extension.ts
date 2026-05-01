@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { ApprovalServerHandle, startApprovalServer } from "./approval_server";
 import { Decision, ExecResult, FirewallClient } from "./firewall";
 import { SecretWatcher, showSecretActivityWebview } from "./secret_watcher";
 import { showApprovalPanel } from "./webview";
@@ -7,6 +8,7 @@ let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
 let firewall: FirewallClient;
 let secretWatcher: SecretWatcher | undefined;
+let approvalServer: ApprovalServerHandle | undefined;
 
 interface ActionRunner {
   /** Human-readable label shown in prompts and audit lines. */
@@ -35,6 +37,18 @@ export function activate(context: vscode.ExtensionContext): void {
   secretWatcher.start();
   context.subscriptions.push(secretWatcher);
 
+  // v0.5.0: localhost approval server. Lets the Claude Code PreToolUse
+  // hook (and the MCP proxy) ask the user via our webview when an action
+  // hits REQUIRE_APPROVAL. Bound to 127.0.0.1 with a token in
+  // ~/.ai-firewall/extension.port. Disposed via context.subscriptions.
+  void startApprovalServer(context, outputChannel)
+    .then((handle) => {
+      approvalServer = handle;
+    })
+    .catch((err) => {
+      outputChannel.appendLine(`[firewall] approval server failed to start: ${err}`);
+    });
+
   context.subscriptions.push(
     vscode.commands.registerCommand("aiFirewall.runCommand", () => runShellCommand(context)),
     vscode.commands.registerCommand("aiFirewall.evaluateSelection", () => evaluateSelectionAsShell(context)),
@@ -54,8 +68,18 @@ export function activate(context: vscode.ExtensionContext): void {
   outputChannel.appendLine("[firewall] extension activated");
 }
 
-export function deactivate(): void {
-  // Disposables are cleaned up via context.subscriptions.
+export async function deactivate(): Promise<void> {
+  // Disposables registered in context.subscriptions are run by VS Code.
+  // We additionally await the approval server's port-file cleanup so
+  // the next session never inherits a stale loopback target.
+  if (approvalServer) {
+    try {
+      await approvalServer.dispose();
+    } catch {
+      // best-effort
+    }
+    approvalServer = undefined;
+  }
 }
 
 // --- Command handlers ---
