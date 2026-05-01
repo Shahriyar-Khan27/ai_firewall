@@ -1,11 +1,15 @@
 <div align="center">
 
-<img src="icon.png" alt="AI Execution Firewall" width="100" height="100" />
+<img src="icon.png" alt="AI Execution Firewall" width="128" height="128" />
 
 # AI Execution Firewall — VS Code Extension
 
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/sk-dev-ai.ai-execution-firewall.svg?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/sk-dev-ai.ai-execution-firewall.svg)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Shahriyar-Khan27/ai_firewall?style=social)](https://github.com/Shahriyar-Khan27/ai_firewall)
+
+**Open source (MIT) — built in the open. Issues, PRs, and ideas all welcome on [GitHub](https://github.com/Shahriyar-Khan27/ai_firewall).**
 
 </div>
 
@@ -16,6 +20,34 @@ VS Code command  →  guard eval  →  Decision  →  webview prompt  →  guard
 ```
 
 The extension never re-implements policy logic — it surfaces what the Python `guard` CLI returns.
+
+## What's new in v0.5.0
+
+The "active interceptor" release. The extension stops being a passive
+Command-Palette tool and becomes the gate for the AI tools running
+alongside it.
+
+- **Auto-detect on first activation.** On startup we shell out to
+  `guard mcp scan --json`, summarise what's unwrapped (Claude Code
+  PreToolUse hook missing + per-host MCP server count), and show a
+  non-modal toast: **[Wire All] [Pick…] [Not Now]**. The "Pick…"
+  fallback opens a multi-select QuickPick. Dismissals are remembered
+  per-fingerprint via globalState — adding a new MCP server re-arms
+  the prompt automatically.
+- **Localhost approval server.** When an AI tool tries something
+  REQUIRE_APPROVAL hits, the firewall's hook routes the Decision to a
+  127.0.0.1 endpoint the extension binds (token-authenticated via
+  `~/.ai-firewall/extension.port`). The existing webview pops up; the
+  user clicks Approve / Reject. AI is paused ≤30s waiting; on timeout
+  the hook falls back to safe-default BLOCK. No more silent auto-deny
+  on REQUIRE_APPROVAL.
+- **Show Status** — markdown preview combining the wired hosts, the
+  approval-server port, and the last 20 audit records.
+- **Detect & Wire AI Tools** / **Unwire All AI Tools** — re-arm or
+  reverse the auto-wire flow on demand.
+- **Decision toasts** — every Approve/Reject from the loopback flow
+  drops a 6-second status-bar message so the firewall's actions never
+  feel invisible.
 
 ## What's new in v0.4.1
 
@@ -133,6 +165,31 @@ To produce an installable `.vsix` (e.g. for sideloading or Marketplace re-publis
 npx vsce package --no-yarn
 ```
 
+## Contributing
+
+<img src="icon.png" alt="" width="64" height="64" align="left" hspace="12" />
+
+This extension is fully open source under the MIT license alongside the Python firewall it gates. The whole project lives at <https://github.com/Shahriyar-Khan27/ai_firewall>.
+
+**Where help is most useful:**
+- **New host detectors** — Aider / Cline / Zed / future AI-IDE configs evolve faster than any one maintainer can track. PRs adding detectors to [`ai_firewall/discovery/mcp_detector.py`](https://github.com/Shahriyar-Khan27/ai_firewall/blob/main/ai_firewall/discovery/mcp_detector.py) keep the extension's auto-wire flow useful for everyone.
+- **Approval webview polish** — better diff rendering, dark-theme tweaks, accessibility, keyboard shortcuts — `vscode-extension/src/webview.ts` welcomes contributions.
+- **Translations of webview copy** — currently English-only.
+- **Bug reports + feature requests** — file at <https://github.com/Shahriyar-Khan27/ai_firewall/issues>. Real-world AI-tool screenshots ("here's what Cursor / Continue / Cline did, and how the firewall handled it") are especially valued.
+
+**To build from source:**
+
+```bash
+git clone https://github.com/Shahriyar-Khan27/ai_firewall.git
+cd ai_firewall/vscode-extension
+npm install
+npm run compile
+```
+
+Open `vscode-extension/` in VS Code and press **F5** to launch an Extension Development Host with the local build.
+
+**Star the repo if you find it useful** — it's the simplest way to signal this kind of safety tooling is worth investing in.
+
 ## Links
 
 - **Source**: https://github.com/Shahriyar-Khan27/ai_firewall
@@ -142,4 +199,4 @@ npx vsce package --no-yarn
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Free for commercial and personal use.

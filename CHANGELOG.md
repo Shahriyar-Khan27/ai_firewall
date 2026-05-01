@@ -4,6 +4,51 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.5.0] — 2026-05-01
+
+The "active interceptor" release. Until now the VS Code extension was a
+passive Command Palette tool — useful when you remembered to invoke it.
+v0.5.0 wires the extension into the AI tools running alongside it
+(Claude Code via the PreToolUse hook, every MCP-aware host via the
+existing transparent proxy), and ends the v0.4.x compromise where the
+firewall would auto-deny REQUIRE_APPROVAL silently. Now the user gets
+the actual Decision in a webview and clicks Approve / Reject.
+
+### New: Approval bridge (Python ↔ extension)
+
+- `ai_firewall/approval/extension_bridge.py` — `make_extension_approval()`
+  builds an `ApprovalFn` that POSTs the Decision to a localhost
+  endpoint the extension binds. Token-authenticated via
+  `~/.ai-firewall/extension.port`, 30s default timeout, falls back to
+  `auto_deny` on any error so a crashed extension never makes hooks
+  *less* safe than today.
+- New env value `AI_FIREWALL_HOOK_APPROVAL=prompt` in the Claude Code
+  PreToolUse hook script — defers to the extension webview, falls back
+  to safe-default BLOCK when no extension is reachable. `block` and
+  `allow` are unchanged.
+
+### New CLI subcommands
+
+- `guard mcp scan --json` emits structured output (mcp_servers list +
+  Claude Code hook installed-status). Used by the extension's
+  auto-detect on first activation.
+- `guard mcp install-hook` writes the PreToolUse hook into
+  `~/.claude/settings.json` (idempotent, preserves unrelated entries,
+  refuses to overwrite invalid JSON, atomic temp+rename).
+- `guard mcp uninstall-hook` reverses install-hook, drops empty
+  scaffolding, no-ops on missing file.
+- `guard audit show --json` emits records as a JSON array (with
+  `tampered: true` markers). `--limit N` slices to the N most-recent
+  matched records. The path argument is now optional; falls back to
+  `AI_FIREWALL_AUDIT_PATH` or `./logs/audit.jsonl`. A missing file
+  returns `[]` in JSON mode.
+
+### Tests
+
+- 452 → 457 (+5 audit-show-json, +8 mcp install/uninstall-hook,
+  +10 extension-bridge, +1 hook prompt-mode case, +1 mcp scan json).
+  Counted from v0.4.1: 433 → 457 (+24 across the v0.5.0 work).
+
 ## [0.4.1] — 2026-05-01
 
 ### Changed

@@ -8,9 +8,12 @@
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/sk-dev-ai.ai-execution-firewall.svg?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![CI](https://github.com/Shahriyar-Khan27/ai_firewall/actions/workflows/ci.yml/badge.svg)](https://github.com/Shahriyar-Khan27/ai_firewall/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/Shahriyar-Khan27/ai_firewall?style=social)](https://github.com/Shahriyar-Khan27/ai_firewall/stargazers)
 
 **Deterministic safety layer between AI agents and real systems.**
 Gate shell commands, file edits, SQL queries, and HTTP requests through a policy pipeline before they execute.
+
+**Open source (MIT) — built in the open. Issues, PRs, and ideas all welcome.**
 
 </div>
 
@@ -22,7 +25,9 @@ The firewall classifies intent, scores risk, applies YAML rules, simulates impac
 
 In v0.3.0 the firewall fades into the background for routine work: it remembers which commands you've approved, inherits permissions from what you just typed in your own terminal, parses commands semantically (catches `echo "<base64>" | base64 -d | sh` as the decoded `rm -rf /`), and runs destructive commands in a Docker dry-run sandbox before touching real disk.
 
-**v0.4.0** is the **enterprise round** — seven additions that move the firewall from "useful CLI for one dev" to "deployable in a regulated org": **AI-SBOM** validation against PyPI / npm / crates.io / RubyGems with typosquat detection, **AI-native DLP** (PII scanner alongside the existing secret scanner), **network egress control** (`curl` / `wget` / `nc` / `socat` route through the same gate as `guard api`), **fine-grained RBAC** via `guard.toml` with role inheritance and `--as <role>`, **rule-based behavior analytics** (rate burst, last-hour spike vs 24h median, quiet-hour outliers — anomalies downgrade ALLOW to REQUIRE_APPROVAL, never escalate BLOCK), **SIEM-ready audit sinks** (syslog / Splunk HEC / generic HTTPS webhook / stdout for vector / fluent-bit, all async with bounded queues), and **cost & resource governance** (rate limits, loop detection, daily API-byte budget). All seven landed in a single release; total of 428 passing tests.
+**v0.4.0** is the **enterprise round** — seven additions that move the firewall from "useful CLI for one dev" to "deployable in a regulated org": **AI-SBOM** validation against PyPI / npm / crates.io / RubyGems with typosquat detection, **AI-native DLP** (PII scanner alongside the existing secret scanner), **network egress control** (`curl` / `wget` / `nc` / `socat` route through the same gate as `guard api`), **fine-grained RBAC** via `guard.toml` with role inheritance and `--as <role>`, **rule-based behavior analytics** (rate burst, last-hour spike vs 24h median, quiet-hour outliers — anomalies downgrade ALLOW to REQUIRE_APPROVAL, never escalate BLOCK), **SIEM-ready audit sinks** (syslog / Splunk HEC / generic HTTPS webhook / stdout for vector / fluent-bit, all async with bounded queues), and **cost & resource governance** (rate limits, loop detection, daily API-byte budget).
+
+**v0.5.0** is the **active interceptor** release. The VS Code extension stops being a passive Command-Palette tool and becomes the gate. On first activation it shells out to `guard mcp scan --json`, surfaces a one-click consent toast, and (on user approval) installs the Claude Code PreToolUse hook into `~/.claude/settings.json` and runs `guard mcp install <server>` for every detected MCP server. From then on, when an AI tool tries something risky, the firewall's existing pipeline runs as today — and on REQUIRE_APPROVAL it routes the Decision back to the extension's loopback HTTP server (`127.0.0.1:<random>`, token-authenticated via `~/.ai-firewall/extension.port`) so the user gets the actual Decision in a webview and clicks **Approve / Reject**. The AI is paused ≤30s waiting; on timeout we fall back to safe-default BLOCK. 457 passing tests.
 
 ## Install
 
@@ -198,15 +203,19 @@ After wrapping, every `tools/call` JSON-RPC request from the host runs through `
 
 ### VS Code extension
 
-After installing from the Marketplace, the **Command Palette** (Ctrl+Shift+P) gives you these commands under `AI Firewall:`
+After installing from the Marketplace, **the extension auto-detects which AI tools you have configured (Claude Code via `~/.claude/settings.json`, every MCP-aware host via `guard mcp scan --json`) and offers a one-click toast to wire firewall protection into all of them.** From then on, when an AI tries something risky, the existing approval webview pops up automatically — no manual invocation needed. *(new in v0.5.0)*
 
+The **Command Palette** (Ctrl+Shift+P) gives you these manual commands under `AI Firewall:`
+
+- **Detect & Wire AI Tools** / **Unwire All AI Tools** *(new in v0.5.0)* — re-arm or reverse the auto-wire flow
+- **Show Status** *(new in v0.5.0)* — markdown summary of wired hosts + last 20 audit decisions
 - **Run Shell Command…** / **Evaluate Selected Text as Shell Command**
 - **Evaluate SQL Query…** / **Evaluate Selected Text as SQL**
 - **Evaluate HTTP Request…**
 - **Show Effective Policy**
 - **Show Recent Secret-DB Activity** *(v0.3.0 — passive watcher for `state.vscdb` modifications)*
-- **Scan Text for Secrets and PII…** / **Scan Selection for Secrets and PII** *(new in v0.4.0)*
-- **Show Governance Status** / **Show Behavior Status** *(new in v0.4.0)*
+- **Scan Text for Secrets and PII…** / **Scan Selection for Secrets and PII** *(v0.4.0)*
+- **Show Governance Status** / **Show Behavior Status** *(v0.4.0)*
 
 Risky actions open a themed approval webview with the risk badge, intent / decision pills, findings list, git context, and a syntax-coloured unified diff. Smart-flow auto-approvals (memory or inheritance match) instead surface a quiet status-bar toast — no webview, no friction. See [vscode-extension/README.md](vscode-extension/README.md) for build / debug / packaging instructions.
 
@@ -308,7 +317,7 @@ api_destructive:
 pytest -q
 ```
 
-433 tests + 1 skipped (Docker round-trip skips when no daemon). CI runs the full suite on Python 3.11 / 3.12 / 3.13 on every push, plus PyInstaller binary builds on tag push.
+457 tests + 1 skipped (Docker round-trip skips when no daemon). CI runs the full suite on Python 3.11 / 3.12 / 3.13 on every push, plus PyInstaller binary builds on tag push.
 
 ## Release flow
 
@@ -328,13 +337,43 @@ git push --tags
 
 VS Code Marketplace publishing is currently manual — re-build the `.vsix` (`npx vsce package --no-yarn` from `vscode-extension/`) and upload via the [Marketplace publisher manage page](https://marketplace.visualstudio.com/manage/publishers/sk-dev-ai).
 
+## Contributing
+
+This project is fully open source under the MIT license. Contributions of any size are welcome.
+
+**Good first issues to pick up:**
+- New SBOM registries (Composer / NuGet / Go modules) — extends [`ai_firewall/engine/package_registry.py`](ai_firewall/engine/package_registry.py)
+- Postgres / MySQL execute adapters — currently SQLite is the only real-execute path
+- Additional MCP host detectors — Zed, Cline, Aider have evolving config layouts
+- Translations / docs polish — README, CHANGELOG, in-CLI help
+- New PII patterns — extend [`ai_firewall/engine/pii_scan.py`](ai_firewall/engine/pii_scan.py) (regex + Luhn-style validators welcome)
+- Statistical / ML behaviour models on top of the audit log — `engine/behavior.py` is currently rule-based
+
+**How to contribute:**
+
+```bash
+git clone https://github.com/Shahriyar-Khan27/ai_firewall.git
+cd ai_firewall
+pip install -e ".[dev]"
+pytest -q       # confirm 457 tests pass
+# make your change, add a test, push a branch, open a PR
+```
+
+Run `pytest` before opening a PR. CI will re-run on Python 3.11 / 3.12 / 3.13. New features land with tests; we don't merge regressions.
+
+**Bugs / questions / feature requests:** open an issue at <https://github.com/Shahriyar-Khan27/ai_firewall/issues>. For security-relevant findings, see [SECURITY.md](SECURITY.md) if present, or email the maintainer privately.
+
+**Star the repo if it's useful** — it's the simplest signal that this kind of safety tooling matters and is worth maintaining.
+
 ## Links
 
 - **PyPI**: https://pypi.org/project/ai-execution-firewall/
 - **VS Code Marketplace**: https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall
+- **GitHub repo**: https://github.com/Shahriyar-Khan27/ai_firewall
 - **GitHub releases**: https://github.com/Shahriyar-Khan27/ai_firewall/releases
+- **Issues**: https://github.com/Shahriyar-Khan27/ai_firewall/issues
 - **CHANGELOG**: [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Free for commercial and personal use, in any context, with attribution.

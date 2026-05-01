@@ -2,6 +2,48 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.5.0] — 2026-05-01
+
+The "active interceptor" release. The extension goes from a
+Command-Palette-only tool to an active gate that wires into the AI
+tools running alongside it.
+
+### Added
+
+- **Auto-detect on first activation.** On startup the extension shells
+  out to `guard mcp scan --json`, summarises what's unwrapped (Claude
+  Code PreToolUse hook missing + per-host MCP server count), and shows
+  a non-modal toast: **[Wire All] [Pick…] [Not Now]**. "Pick…" opens a
+  multi-select QuickPick. Dismissals are remembered per-fingerprint
+  via globalState — adding a new MCP server to your config re-arms the
+  prompt.
+- **Localhost approval server.** `~/.ai-firewall/extension.port`
+  publishes a token-authenticated 127.0.0.1 endpoint. The Python
+  Claude Code hook (and the MCP transparent proxy) POST the Decision
+  there when REQUIRE_APPROVAL fires; the existing approval webview
+  pops up; the user's click flows back as the hook's exit code. AI
+  paused for ≤30s waiting for you. Falls back to safe-default BLOCK
+  when no extension is reachable.
+- **AI Firewall: Show Status** — markdown preview combining the wired
+  hosts, the approval-server port + token path, and the last 20 audit
+  records as a table. One place to glance at "what's protected and
+  what just happened?"
+- **AI Firewall: Detect & Wire AI Tools** / **AI Firewall: Unwire All
+  AI Tools** — re-run the consent flow on demand or reverse every
+  install (modal confirmation; safe to re-run; non-destructive aside
+  from the config edits).
+- **Decision toasts** — every Approve/Reject from the loopback flow
+  drops a 6-second status-bar message so the firewall's actions never
+  feel invisible.
+
+### Changed
+
+- Bumped to v0.5.0 to track the Python package. Minimum CLI version is
+  now 0.5.0 — the extension shells out to `guard mcp scan --json`,
+  `guard mcp install-hook`, and `guard audit show --json`, all of
+  which only exist in 0.5.0+. Older CLI = friendlier error in the
+  output channel, no crash.
+
 ## [0.4.1] — 2026-05-01
 
 ### Changed
