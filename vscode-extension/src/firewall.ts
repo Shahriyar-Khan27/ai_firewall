@@ -49,6 +49,23 @@ export interface McpScanResult {
   };
 }
 
+/** Single audit record as returned by `guard audit show --json`. */
+export interface AuditRecord {
+  ts: number;
+  action_id?: string;
+  type?: string;
+  rendered?: string;
+  intent?: string;
+  risk?: string;
+  decision?: string;
+  reason?: string;
+  approved?: boolean | null;
+  executed?: boolean;
+  exit_code?: number | null;
+  tampered?: boolean;
+  impact?: Record<string, unknown>;
+}
+
 interface SpawnResult {
   stdout: string;
   stderr: string;
@@ -248,6 +265,25 @@ export class FirewallClient {
       throw new Error(`guard mcp uninstall-hook failed: ${result.stderr || result.stdout}`);
     }
     return result.stdout.trim();
+  }
+
+  /** Fetch recent audit records via `guard audit show --json`, falling back
+   *  to direct file reads if the CLI doesn't support --json yet. */
+  async recentAuditRecords(limit = 20): Promise<AuditRecord[]> {
+    const cfg = vscode.workspace.getConfiguration("aiFirewall");
+    const audit = cfg.get<string>("auditPath", "");
+    const args = ["audit", "show", "--limit", String(limit), "--json"];
+    if (audit) args.push(audit);
+    const result = await this.spawn(args);
+    if (result.exitCode !== 0) {
+      // Older CLIs may not have --json; surface a friendlier error.
+      throw new Error(`guard audit show failed: ${result.stderr || result.stdout}`);
+    }
+    try {
+      return JSON.parse(result.stdout) as AuditRecord[];
+    } catch {
+      throw new Error(`guard audit show returned non-JSON output`);
+    }
   }
 
   /** Calls `guard policy show` and returns the YAML text. */

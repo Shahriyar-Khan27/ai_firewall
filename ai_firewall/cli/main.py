@@ -631,14 +631,26 @@ def audit_verify(
 
 @audit_app.command("show")
 def audit_show(
-    path: Path = typer.Argument(..., exists=True, help="Path to the audit JSONL file."),
+    path: Optional[Path] = typer.Argument(None, help="Path to the audit JSONL file. Defaults to AI_FIREWALL_AUDIT_PATH or ./logs/audit.jsonl."),
     since: Optional[str] = typer.Option(None, "--since", help="Show only records newer than this duration (e.g. 1h, 24h, 7d)."),
     tampered_only: bool = typer.Option(False, "--tampered-only", help="Show only records that fail HMAC verification."),
+    json_output: bool = typer.Option(False, "--json", help="Emit records as a JSON array (used by the VS Code extension's status sidebar)."),
+    limit: int = typer.Option(0, "--limit", help="Show at most N most-recent records. 0 = no limit."),
 ):
     """Print recent audit records in human-readable form."""
     from ai_firewall.audit.verifier import verify
     import re as _re
     import time as _time
+
+    if path is None:
+        env_audit = os.environ.get("AI_FIREWALL_AUDIT_PATH")
+        path = Path(env_audit) if env_audit else Path("logs/audit.jsonl")
+    if not path.exists():
+        if json_output:
+            typer.echo("[]")
+            return
+        typer.secho(f"audit log not found at {path}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(2)
 
     cutoff = None
     if since:
@@ -653,6 +665,7 @@ def audit_show(
     report = verify(path) if tampered_only else None
     tampered_set = set(report.tampered_indices) if report else None
 
+    matched: list[tuple[int, dict]] = []
     with path.open("r", encoding="utf-8") as fh:
         for idx, line in enumerate(fh):
             line = line.strip()
@@ -668,13 +681,29 @@ def audit_show(
                 continue
             if tampered_only and idx not in tampered_set:
                 continue
-            ts = rec.get("ts", 0)
-            kind = rec.get("type", "?")
-            decision = rec.get("decision", "?")
-            risk = rec.get("risk", "?")
-            rendered = (rec.get("rendered") or "")[:80]
-            tamper = " [TAMPERED]" if tampered_set and idx in tampered_set else ""
-            typer.echo(f"{_time.strftime('%Y-%m-%d %H:%M:%S', _time.localtime(ts))}  {kind:5}  {decision:18}  {risk:8}  {rendered}{tamper}")
+            matched.append((idx, rec))
+
+    if limit and len(matched) > limit:
+        matched = matched[-limit:]
+
+    if json_output:
+        out = []
+        for idx, rec in matched:
+            entry = dict(rec)
+            if tampered_set and idx in tampered_set:
+                entry["tampered"] = True
+            out.append(entry)
+        typer.echo(json.dumps(out))
+        return
+
+    for idx, rec in matched:
+        ts = rec.get("ts", 0)
+        kind = rec.get("type", "?")
+        decision = rec.get("decision", "?")
+        risk = rec.get("risk", "?")
+        rendered = (rec.get("rendered") or "")[:80]
+        tamper = " [TAMPERED]" if tampered_set and idx in tampered_set else ""
+        typer.echo(f"{_time.strftime('%Y-%m-%d %H:%M:%S', _time.localtime(ts))}  {kind:5}  {decision:18}  {risk:8}  {rendered}{tamper}")
 
 
 @policy_app.command("show")

@@ -170,6 +170,11 @@ async function handleRequest(
   const choice = await showApprovalPanel(context, command, body.decision);
   output.appendLine(`[approval-server] user choice: ${choice}`);
 
+  // Surface the outcome in the status bar so the user has a one-line
+  // confirmation that the firewall just gated something.
+  const verb = choice === "approve" ? "$(check) approved" : "$(error) rejected";
+  vscode.window.setStatusBarMessage(`$(shield) Firewall ${verb}: ${command.slice(0, 60)}`, 6000);
+
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ decision: choice }));

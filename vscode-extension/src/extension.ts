@@ -71,6 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("aiFirewall.unwireAll", () =>
       unwireAll(context, { firewall, output: outputChannel }),
     ),
+    vscode.commands.registerCommand("aiFirewall.showStatus", () => showStatus()),
   );
 
   // First-activation auto-wire: runs once per "fingerprint" of detected
@@ -224,6 +225,70 @@ async function showBehaviorStatus(): Promise<void> {
   } catch (e) {
     vscode.window.showErrorMessage(`AI Firewall: ${(e as Error).message}`);
   }
+}
+
+async function showStatus(): Promise<void> {
+  // Combine: auto-wire status + recent audit records into one markdown doc.
+  let scanLines: string[] = ["## Wired hosts", ""];
+  try {
+    const scan = await firewall.mcpScanJson();
+    if (scan.claude_code_hook.installed) {
+      scanLines.push(`- ✅ **Claude Code** PreToolUse hook installed (${scan.claude_code_hook.settings_path})`);
+    } else {
+      scanLines.push("- ⚠️ Claude Code PreToolUse hook **not installed** — run `AI Firewall: Detect & Wire AI Tools`");
+    }
+    if (scan.mcp_servers.length === 0) {
+      scanLines.push("- (no MCP servers detected in known hosts)");
+    } else {
+      for (const s of scan.mcp_servers) {
+        const tag = s.wrapped ? "✅ wrapped" : "⚠️ unwrapped";
+        scanLines.push(`- ${tag}: \`${s.host}/${s.name}\` — \`${s.config_path}\``);
+      }
+    }
+  } catch (e) {
+    scanLines.push(`(scan failed: ${(e as Error).message})`);
+  }
+
+  let auditLines: string[] = ["", "## Recent decisions", ""];
+  try {
+    const records = await firewall.recentAuditRecords(20);
+    if (records.length === 0) {
+      auditLines.push("(no audit records yet)");
+    } else {
+      auditLines.push("| time | type | intent | risk | decision | rendered |");
+      auditLines.push("|---|---|---|---|---|---|");
+      for (const r of records) {
+        const t = new Date((r.ts ?? 0) * 1000).toLocaleString();
+        const decision = r.tampered ? `${r.decision} ⚠️ tampered` : (r.decision ?? "?");
+        const rendered = (r.rendered ?? "").slice(0, 60).replace(/\|/g, "\\|");
+        auditLines.push(`| ${t} | ${r.type ?? "?"} | ${r.intent ?? "?"} | ${r.risk ?? "?"} | ${decision} | \`${rendered}\` |`);
+      }
+    }
+  } catch (e) {
+    auditLines.push(`(audit fetch failed: ${(e as Error).message})`);
+  }
+
+  const portInfo = approvalServer
+    ? `Listening on \`127.0.0.1:${approvalServer.port}\` (token at \`${approvalServer.portFilePath}\`)`
+    : "Approval server not running.";
+
+  const md = [
+    "# AI Firewall Status",
+    "",
+    "## Approval bridge",
+    "",
+    portInfo,
+    "",
+    ...scanLines,
+    ...auditLines,
+    "",
+    "---",
+    "",
+    "_Refresh: re-run `AI Firewall: Show Status`._",
+  ].join("\n");
+
+  const doc = await vscode.workspace.openTextDocument({ content: md, language: "markdown" });
+  await vscode.window.showTextDocument(doc, { preview: true });
 }
 
 // --- Generic action driver: same flow for shell / SQL / API ---

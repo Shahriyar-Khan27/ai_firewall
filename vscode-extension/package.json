@@ -110,6 +110,11 @@
         "command": "aiFirewall.unwireAll",
         "title": "Unwire All AI Tools",
         "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.showStatus",
+        "title": "Show Status (wired hosts + recent decisions)",
+        "category": "AI Firewall"
       }
     ],
     "configuration": {
