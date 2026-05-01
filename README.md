@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="AI Execution Firewall" width="120" height="120" />
+<img src="https://raw.githubusercontent.com/Shahriyar-Khan27/ai_firewall/main/assets/logo.png" alt="AI Execution Firewall" width="120" height="120" />
 
 # AI Execution Firewall
 

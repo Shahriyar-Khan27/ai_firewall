@@ -4,6 +4,13 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.3.1] — 2026-05-01
+
+### Changed
+- README polish: hero logo, smart-flow UX section, full v0.3.0 quickstart (`--dryrun`, `mcp scan/install`, `audit init-key/verify`), updated Adapters and Scope sections, refreshed test count (277). Logo image now uses an absolute GitHub raw URL so it renders correctly on PyPI as well as on the GitHub repo page.
+
+No code changes.
+
 ## [0.3.0] — 2026-05-01
 
 The "fade into the background" release. v0.2.x worked but prompted on every
