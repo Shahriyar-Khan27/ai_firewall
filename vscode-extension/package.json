@@ -100,6 +100,16 @@
         "command": "aiFirewall.showBehaviorStatus",
         "title": "Show Behavior Status (anomaly thresholds)",
         "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.detectAndWire",
+        "title": "Detect & Wire AI Tools",
+        "category": "AI Firewall"
+      },
+      {
+        "command": "aiFirewall.unwireAll",
+        "title": "Unwire All AI Tools",
+        "category": "AI Firewall"
       }
     ],
     "configuration": {

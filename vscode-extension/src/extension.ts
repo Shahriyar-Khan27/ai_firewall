@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { ApprovalServerHandle, startApprovalServer } from "./approval_server";
+import { resetAutoWireDismissal, runAutoWire, unwireAll } from "./auto_wire";
 import { Decision, ExecResult, FirewallClient } from "./firewall";
 import { SecretWatcher, showSecretActivityWebview } from "./secret_watcher";
 import { showApprovalPanel } from "./webview";
@@ -63,7 +64,20 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("aiFirewall.scanSelection", () => scanSelection()),
     vscode.commands.registerCommand("aiFirewall.showGovernanceStatus", () => showGovernanceStatus()),
     vscode.commands.registerCommand("aiFirewall.showBehaviorStatus", () => showBehaviorStatus()),
+    vscode.commands.registerCommand("aiFirewall.detectAndWire", async () => {
+      await resetAutoWireDismissal(context);
+      await runAutoWire(context, { firewall, output: outputChannel }, true);
+    }),
+    vscode.commands.registerCommand("aiFirewall.unwireAll", () =>
+      unwireAll(context, { firewall, output: outputChannel }),
+    ),
   );
+
+  // First-activation auto-wire: runs once per "fingerprint" of detected
+  // unwrapped targets. Non-blocking — failures are logged, not surfaced.
+  void runAutoWire(context, { firewall, output: outputChannel }).catch((err) => {
+    outputChannel.appendLine(`[firewall] auto-wire crashed: ${err}`);
+  });
 
   outputChannel.appendLine("[firewall] extension activated");
 }

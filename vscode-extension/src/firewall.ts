@@ -29,6 +29,26 @@ export interface ExecResult {
   stderr: string;
 }
 
+/** Shape returned by `guard mcp scan --json` — matches the Python CLI. */
+export interface McpServerEntry {
+  host: string;
+  name: string;
+  config_path: string;
+  wrapped: boolean;
+  command?: string;
+  args?: string[];
+  upstream_command?: string | null;
+  upstream_args?: string[];
+}
+
+export interface McpScanResult {
+  mcp_servers: McpServerEntry[];
+  claude_code_hook: {
+    settings_path: string;
+    installed: boolean;
+  };
+}
+
 interface SpawnResult {
   stdout: string;
   stderr: string;
@@ -173,6 +193,61 @@ export class FirewallClient {
       throw new Error(`guard behavior status failed: ${result.stderr || result.stdout}`);
     }
     return result.stdout;
+  }
+
+  /**
+   * Calls `guard mcp scan --json` and returns the parsed payload.
+   * Used by the auto-wire toast on first activation.
+   */
+  async mcpScanJson(): Promise<McpScanResult> {
+    const args = ["mcp", "scan", "--json"];
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (cwd) args.push("--workspace", cwd);
+    const result = await this.spawn(args);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard mcp scan failed: ${result.stderr || result.stdout}`);
+    }
+    try {
+      return JSON.parse(result.stdout) as McpScanResult;
+    } catch {
+      throw new Error(`guard mcp scan returned non-JSON output: ${result.stdout}`);
+    }
+  }
+
+  /** `guard mcp install <name>` — wraps an unwrapped MCP server in place. */
+  async mcpInstall(name: string): Promise<string> {
+    const result = await this.spawn(["mcp", "install", name]);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard mcp install '${name}' failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
+  }
+
+  /** `guard mcp uninstall <name>` — restores a previously-wrapped server. */
+  async mcpUninstall(name: string): Promise<string> {
+    const result = await this.spawn(["mcp", "uninstall", name]);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard mcp uninstall '${name}' failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
+  }
+
+  /** `guard mcp install-hook` — adds the Claude Code PreToolUse hook. */
+  async mcpInstallHook(approvalMode: "prompt" | "block" | "allow" = "prompt"): Promise<string> {
+    const result = await this.spawn(["mcp", "install-hook", "--approval-mode", approvalMode]);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard mcp install-hook failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
+  }
+
+  /** `guard mcp uninstall-hook` — reverses install-hook. */
+  async mcpUninstallHook(): Promise<string> {
+    const result = await this.spawn(["mcp", "uninstall-hook"]);
+    if (result.exitCode !== 0) {
+      throw new Error(`guard mcp uninstall-hook failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
   }
 
   /** Calls `guard policy show` and returns the YAML text. */
