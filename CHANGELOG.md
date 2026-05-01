@@ -4,6 +4,98 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.4.0] — 2026-05-01
+
+The "enterprise round" release. v0.3.x made the firewall pleasant for one
+developer with one repo; v0.4.0 is the seven things that move it from
+"useful CLI" to "deployable in a regulated org": SBOM validation, DLP for
+prompts, network egress control, role-based access control, behavior
+analytics, SIEM-ready audit sinks, and cost & resource governance.
+
+### Detection extensions (Stage 1)
+
+- **AI SBOM validation** ([ai_firewall/engine/package_registry.py](ai_firewall/engine/package_registry.py)).
+  When `pip install <pkg>`, `npm install <pkg>`, `cargo install <pkg>`, or
+  `gem install <pkg>` runs, the firewall verifies the package against the
+  public registry (PyPI / npm / crates.io / RubyGems). Unknown packages →
+  CRITICAL ("not found on registry"). Damerau-Levenshtein edit-distance
+  check against a frozen top-100 popular-package list catches typosquats
+  like `requets` (vs `requests`) or `djnago` (vs `django`) → HIGH.
+  24-hour SQLite cache at `~/.ai-firewall/registry-cache.sqlite`.
+- **AI-native DLP** ([ai_firewall/engine/pii_scan.py](ai_firewall/engine/pii_scan.py)).
+  Bolt-on PII scanner that mirrors the existing `secret_scan.py` shape —
+  same regex-table-with-severity pattern. Detects email, US SSN (with
+  invalid-block filter), Luhn-validated credit cards, E.164/US phone
+  numbers, IBAN (country-code whitelisted), and a high-entropy fallback
+  for unknown 32+ char tokens. Wired into `_api_impact()` so HTTP request
+  bodies and headers are scanned. New `guard scan "<text>"` CLI for
+  ad-hoc paste-time checks.
+- **Network egress control** ([ai_firewall/engine/intent.py](ai_firewall/engine/intent.py)).
+  Shell parser now recognises `curl`, `wget`, `httpie`, `nc`, `telnet`,
+  `socat`, `scp`, `rsync`, `sftp`, `ftp`. HTTP-ish verbs route through
+  the same `url_analysis` gate as `guard api`, so `curl
+  http://169.254.169.254/` BLOCKs at CRITICAL just like `guard api GET
+  ...`. Raw-socket / file-transfer verbs classify as new
+  `IntentType.NETWORK_EGRESS` (always HIGH baseline, always confirms).
+
+### Audit + governance (Stage 2)
+
+- **SIEM-ready audit sinks** ([ai_firewall/audit/sinks.py](ai_firewall/audit/sinks.py)).
+  Pluggable destinations alongside the local JSONL: `JsonlFileSink`
+  (default, sync), `StdoutSink` (for piping into vector / fluent-bit),
+  `SyslogSink` (RFC 5424 over UDP/TCP, severity from `record.risk`),
+  `SplunkHECSink` (HEC envelope, token via env), and `HttpsSink` (generic
+  webhook for Datadog / Elastic / custom). All non-file sinks own a
+  daemon thread + bounded queue so a slow downstream never blocks the
+  firewall's hot path. `build_sinks_from_config()` factory for
+  declarative `[[sink]]` config.
+- **Cost & resource governance** ([ai_firewall/engine/governance.py](ai_firewall/engine/governance.py)).
+  Three enforcements all reading the audit log via a 24h-cached
+  `RollingCounter`: rate limits per intent (e.g. >20 file deletes in
+  60s), loop detection (same normalized command repeated >5× in 10s),
+  and an API spend ceiling (proxied by request-body bytes per 24h).
+  Verdicts return BLOCK before the policy stage so a runaway loop can't
+  slip through smart-flow. New `guard governance status` CLI shows
+  current counters and remaining budget.
+
+### Identity + analytics (Stage 3)
+
+- **Fine-grained RBAC** ([ai_firewall/config/guard_toml.py](ai_firewall/config/guard_toml.py),
+  [ai_firewall/engine/rbac.py](ai_firewall/engine/rbac.py)). New
+  `~/.ai-firewall/guard.toml` (and per-project `.guard.toml` override).
+  Roles support intent allow/deny lists, file-glob allow/deny, MCP-tool
+  allow/deny, and `inherits = "<role>"`. Custom glob matcher with `**`
+  recursive support so `~/.ssh/**` and `**/credentials*` work
+  cross-platform. Identity priority: `--as <role>` flag →
+  `AI_FIREWALL_ROLE` env → `[identity].default_role` from guard.toml →
+  `"dev"`. RBAC runs FIRST in `Guard.evaluate()`; DENY is a final BLOCK.
+- **Behavior analytics** ([ai_firewall/engine/behavior.py](ai_firewall/engine/behavior.py)).
+  Three rule-based anomaly heuristics — no ML, no new persistent state.
+  `rate_burst` (per-intent count threshold within a window), `rate_spike`
+  (last hour rate >Nx 24h median, requires 6h baseline), and
+  `quiet_hour` (intent appearing in a historically-zero hour-of-day,
+  guarded by both total-actions and distinct-hours minima to avoid
+  sparse-history false positives). Behavior runs LAST and only ever
+  *downgrades* an ALLOW into REQUIRE_APPROVAL — never escalates BLOCK or
+  upgrades approval. New `guard behavior status` CLI.
+
+### Infra
+
+- `Guard` now honours `AI_FIREWALL_AUDIT_PATH` env var for the default
+  audit log, so subprocess hooks and MCP servers can be redirected
+  in tests without code changes. `guard eval` and `guard api
+  --evaluate-only` accept `--audit` for deterministic test runs.
+  Per-test fixture in `conftest.py` auto-isolates the user-level
+  `guard.toml`, the MCP server's audit log, the memory DB, and the
+  HMAC key.
+
+### Numbers
+
+- 285 → 428 tests (+143 across `test_package_registry`, `test_pii_scan`,
+  `test_egress`, `test_audit_sinks`, `test_governance`, `test_rbac`,
+  `test_behavior`).
+- No new top-level deps. `tomllib` (3.11+ stdlib) handles guard.toml.
+
 ## [0.3.1] — 2026-05-01
 
 ### Changed

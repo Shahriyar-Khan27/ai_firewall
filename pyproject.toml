@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-execution-firewall"
-version = "0.3.1"
+version = "0.4.0"
 description = "Deterministic execution-level safety layer between AI agents and real systems (shell, files, SQL, HTTP)."
 requires-python = ">=3.11"
 readme = "README.md"
