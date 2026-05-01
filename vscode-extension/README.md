@@ -17,6 +17,16 @@ VS Code command  →  guard eval  →  Decision  →  webview prompt  →  guard
 
 The extension never re-implements policy logic — it surfaces what the Python `guard` CLI returns.
 
+## What's new in v0.4.0
+
+The "enterprise round" of the underlying firewall — seven additions that move it from "useful CLI" to "deployable in a regulated org" — surface in the extension as four new Command Palette entries:
+
+- **Scan Text for Secrets and PII…** / **Scan Selection for Secrets and PII** — paste-time DLP. Run any text through the firewall's combined secret + PII scanner (emails, US SSN, Luhn-validated credit cards, E.164 / US phone, IBAN, AWS / GitHub / Slack / Stripe / Anthropic / OpenAI tokens, PEM keys, JWTs, high-entropy fallbacks). Clean text gets a quiet info toast; major / critical findings open a preview document with severity + per-finding lines.
+- **Show Governance Status** — opens a preview document with current rate-limit counters per intent, loop-detection settings, and 24h API byte spend (mirrors `guard governance status`).
+- **Show Behavior Status** — current per-intent burst counts plus configured anomaly thresholds (rate burst, last-hour spike vs 24h median, quiet-hour outlier guards). Mirrors `guard behavior status`.
+
+Under the hood, the underlying CLI now also enforces **AI-SBOM** validation on `pip install` / `npm install` / `cargo install` / `gem install` (catches typosquats and hallucinated package names), **network egress control** (`curl` / `wget` / `nc` / `socat` route through the same gate as `guard api`), and **fine-grained RBAC** (per-role intent / file-glob / MCP-tool deny lists from `~/.ai-firewall/guard.toml`). Audit records can also broadcast to **SIEM sinks** (syslog / Splunk HEC / generic HTTPS webhook / stdout).
+
 ## What's new in v0.3.0
 
 - **Smart-flow status-bar toasts** — when the firewall auto-approves an action via *memory* (you've approved this kind of thing before in this project) or *inheritance* (you just typed an equivalent command in your own terminal), a quiet 4-second status-bar message surfaces what happened. No webview, no friction. Approval fatigue solved.
@@ -40,7 +50,7 @@ code --install-extension sk-dev-ai.ai-execution-firewall
 The extension requires the [`guard` Python CLI](https://pypi.org/project/ai-execution-firewall/) on PATH:
 
 ```bash
-pip install ai-execution-firewall    # 0.3.0+ recommended for smart-flow
+pip install ai-execution-firewall    # 0.4.0+ required for scan / governance / behavior commands
 guard --help                          # confirm it's available
 ```
 
@@ -50,7 +60,7 @@ If `guard` isn't on PATH (e.g. installed inside a virtualenv), set the absolute 
 
 ## Commands
 
-Seven commands, all under the `AI Firewall:` prefix in the Command Palette (Ctrl+Shift+P):
+All under the `AI Firewall:` prefix in the Command Palette (Ctrl+Shift+P):
 
 | Command | What it does |
 |---|---|
@@ -60,7 +70,11 @@ Seven commands, all under the `AI Firewall:` prefix in the Command Palette (Ctrl
 | **Evaluate Selected Text as SQL** | Same SQL flow, using the editor's selection. |
 | **Evaluate HTTP Request…** | Pick HTTP method (GET / POST / PUT / PATCH / DELETE / …), enter URL. Detects SSRF, cloud-metadata endpoints, URL credentials, leaked secrets in body / Authorization headers. Analyze-only — never makes the request. |
 | **Show Effective Policy** | Open the merged YAML rules in a preview tab. |
-| **Show Recent Secret-DB Activity** *(new in 0.3.0)* | Open a read-only webview listing recent writes to your editor's `state.vscdb` so you can spot extensions that read your secrets. |
+| **Show Recent Secret-DB Activity** *(0.3.0)* | Open a read-only webview listing recent writes to your editor's `state.vscdb` so you can spot extensions that read your secrets. |
+| **Scan Text for Secrets and PII…** *(new in 0.4.0)* | Paste any text into an input box; the firewall's combined secret + PII scanner returns a severity ladder + per-finding list. Useful as a paste-time check before pasting code or logs into an external tool. |
+| **Scan Selection for Secrets and PII** *(new in 0.4.0)* | Same scan, run against the active editor's current selection. |
+| **Show Governance Status** *(new in 0.4.0)* | Preview document with current rate-limit counters per intent, loop-detection settings, and 24h API byte spend. |
+| **Show Behavior Status** *(new in 0.4.0)* | Configured anomaly thresholds (rate burst, last-hour spike vs 24h median, quiet-hour guards) alongside current per-intent burst counts. |
 
 A status bar item (`🛡️ Firewall`, bottom-left) is a one-click shortcut to **Run Shell Command…**.
 
@@ -78,6 +92,8 @@ After install + `pip install ai-execution-firewall`, try these in the Command Pa
 | SQL | `DELETE FROM users` | REQUIRE_APPROVAL — CRITICAL (no WHERE), shown in webview with the finding |
 | SQL | `DROP DATABASE prod` | BLOCK — red toast, never reaches an adapter |
 | HTTP | `GET http://169.254.169.254/` | REQUIRE_APPROVAL — CRITICAL (cloud metadata SSRF) |
+| Scan | `my SSN is 123-45-6789` | severity CRITICAL — finding "PII: US SSN" *(0.4.0)* |
+| Scan | `pip install requets` *(via Run Shell)* | BLOCK — possible typosquat of `requests` *(0.4.0 SBOM)* |
 
 ## Settings
 

