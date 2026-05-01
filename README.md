@@ -6,7 +6,7 @@
 
 ### A deterministic policy gate for every action an AI agent executes.
 
-*Block dangerous shell commands, file edits, SQL queries, and HTTP requests before they reach the OS. Approve the rest in one click.*
+Inspect, classify, and approve every shell command, file edit, SQL query, and HTTP request before it reaches the operating system. Risky actions raise an in-editor approval prompt; routine ones pass silently.
 
 [![PyPI](https://img.shields.io/pypi/v/ai-execution-firewall.svg)](https://pypi.org/project/ai-execution-firewall/)
 [![VS Marketplace](https://vsmarketplacebadges.dev/version-short/sk-dev-ai.ai-execution-firewall.png?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
@@ -16,9 +16,9 @@
 
 </div>
 
-> When **Claude Code**, **Cursor**, or **Copilot** run in auto-mode, they execute shell commands, edit files, and call APIs at machine speed without asking. **AI Execution Firewall** is the deterministic policy layer between them and your real systems. Every action runs through risk and impact analysis first; anything dangerous either blocks outright, or surfaces an approval webview with the diff, the findings, and **Approve / Reject** buttons.
+AI coding agents (Claude Code, Cursor, Copilot, Continue, Cline, Zed) increasingly execute commands, edit files, and call APIs without operator review. AI Execution Firewall sits between those agents and the host system and enforces a deterministic policy on every action. Every request is classified, scored for risk, simulated for impact, and matched against YAML rules before it can run. Risky actions either block, or open an approval surface (CLI prompt or VS Code webview) showing the diff, the findings, and explicit Approve / Reject controls.
 
-**Open source (MIT). 457 passing tests. Works with Claude Code, Cursor, Continue, Cline, Zed, and any MCP host.**
+Open source under the MIT license. 457 passing tests. Compatible with Claude Code, Cursor, Continue, Cline, Zed, and any MCP-aware host.
 
 ```text
 $ guard run "pip install requets"
@@ -31,21 +31,21 @@ severity: critical
 $ guard run "curl http://169.254.169.254/"
 [FIREWALL] BLOCK: cloud metadata endpoint, credential exfil risk
 
-$ guard run "rm -rf ./build"           # AI tries this in auto-mode
+$ guard run "rm -rf ./build"           # action issued by an AI agent in auto-mode
 [FIREWALL] REQUIRE_APPROVAL: 47 files affected, uncommitted changes
-           > Approval webview pops up in VS Code; user clicks Reject.
-[FIREWALL] BLOCK: user rejected via extension
+           Approval webview opened in VS Code. Operator selects Reject.
+[FIREWALL] BLOCK: rejected by operator via extension
 ```
 
-## Why this exists
+## What it catches
 
-| Without us | With us |
+| Threat | Firewall outcome |
 |---|---|
-| AI runs `pip install requets` (typosquat). | **BLOCKED**: typosquat of `requests` (PyPI registry check plus Damerau-Levenshtein vs top-100). |
-| AI runs `curl http://169.254.169.254/` to exfiltrate cloud credentials. | **BLOCKED**: cloud metadata endpoint, CRITICAL risk. |
-| AI runs 25 file deletes in 60 seconds in a stuck loop. | **REQUIRE_APPROVAL**: behaviour anomaly, rate burst. |
-| AI pastes your AWS key into a chat, log, or Jira ticket. | `guard scan` flags it before you hit send. |
-| AI silently auto-deletes your build artifacts. | Surfaces an approval webview with the diff. You click Approve once; future identical actions auto-approve via memory. |
+| AI agent issues `pip install requets` (typosquat). | BLOCK. Typosquat of `requests` flagged via the PyPI registry check and Damerau-Levenshtein comparison against the top-100 packages. |
+| AI agent issues `curl http://169.254.169.254/` to reach a cloud metadata endpoint. | BLOCK. Endpoint classified as CRITICAL risk; credential exfiltration vector. |
+| AI agent issues 25 file deletes in 60 seconds in a stuck loop. | REQUIRE_APPROVAL. Behaviour anomaly: rate burst threshold exceeded. |
+| AI agent emits an AWS access key in a request body, log entry, or pasted text. | Detected by the secret scanner; surfaced before the request leaves the host. |
+| AI agent attempts to delete an unfamiliar build directory. | Approval webview opens with the unified diff and impact summary. Operator decision is recorded in memory; future identical actions auto-approve. |
 
 ```
 AI > Action > Firewall > Decision > Execution
@@ -53,7 +53,7 @@ AI > Action > Firewall > Decision > Execution
 
 The firewall classifies intent, scores risk, applies YAML rules, simulates impact (unified diff for code, SQL AST findings, git context, SSRF and leaked-secret detection for URLs), and returns one of `ALLOW`, `BLOCK`, or `REQUIRE_APPROVAL`. Every decision is appended to an audit log.
 
-> **What ships today.** Semantic command parsing with obfuscation decoding. Approved-pattern memory. Permission inheritance from your shell history. HMAC-signed audit trails. Docker sandbox dry-run. MCP transparent proxy. AI-SBOM (PyPI, npm, crates.io, RubyGems). DLP for secrets and PII. Network egress control. Fine-grained RBAC. Behaviour anomaly detection. SIEM-ready audit sinks. Rate limiting, loop detection, and a daily API-byte budget. Auto-detect and one-click wire of Claude Code, Cursor, Continue, Cline, and Zed. Full release notes in [CHANGELOG.md](CHANGELOG.md).
+> **Capabilities.** Semantic command parsing with obfuscation decoding; approved-pattern memory; permission inheritance from the host shell history; HMAC-signed audit trails; Docker sandbox dry-run; MCP transparent proxy; AI-SBOM validation against PyPI, npm, crates.io, and RubyGems; DLP for secrets and PII; network egress control; fine-grained RBAC via guard.toml; rule-based behaviour anomaly detection; SIEM-ready audit sinks; rate limiting, loop detection, and a daily API-byte budget; automatic detection and integration of Claude Code, Cursor, Continue, Cline, and Zed. Full release notes in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
@@ -83,21 +83,21 @@ cd ai_firewall
 pip install -e ".[dev]"
 ```
 
-## The smart-flow UX (new in v0.3.0)
+## Smart-flow approval pipeline (v0.3.0)
 
-The firewall used to prompt on every risky action. Users would turn it off after a week. v0.3.0 replaces that with a layered flow that gets quieter the more you use it:
+Earlier versions prompted on every risky action and produced approval fatigue. v0.3.0 replaces the single-prompt model with a layered pipeline that becomes progressively quieter as it learns the operator's patterns:
 
-| Step | Behaviour |
-|---|---|
-| 1 | **Silent pass** for safe commands (`git status`, `ls`, `echo`); never prompts. |
-| 2 | **Memory match** auto-approves repeats of previously-OK actions in the same project, with a quiet status-bar toast. |
-| 3 | **Permission inheritance** auto-approves when the user just ran the same command themselves in the last 5 minutes. |
-| 4 | **Semantic detection**: even `echo "<b64>" \| base64 -d \| sh` is recognised as the decoded `rm -rf /` (bashlex AST plus decoders). |
-| 5 | **Sandbox replay** (opt-in): `--dryrun` runs the command in Docker first, shows the file diff, then asks. |
-| 6 | **Auto-block** for unambiguous malice (`rm -rf /`, fork bombs, `DROP DATABASE prod`). |
-| 7 | **Approve / Reject** prompt as the last-resort fallback. |
+| Step | Stage | Behaviour |
+|---|---|---|
+| 1 | **Silent pass** | Safe commands (`git status`, `ls`, `echo`) execute without a prompt. |
+| 2 | **Memory match** | Repeats of previously-approved actions in the same project auto-approve, with a status-bar notification. |
+| 3 | **Permission inheritance** | Auto-approves when the operator has issued an equivalent command in the host shell within the last five minutes. |
+| 4 | **Semantic detection** | Obfuscated payloads are decoded before classification. `echo "<b64>" \| base64 -d \| sh` is recognised as the decoded `rm -rf /` via the bashlex AST and the obfuscation decoders. |
+| 5 | **Sandbox replay** (opt-in) | `--dryrun` runs the command in a disposable Docker container, surfaces the resulting file diff, and then prompts for approval. |
+| 6 | **Auto-block** | Unambiguous malicious patterns (`rm -rf /`, fork bombs, `DROP DATABASE prod`) are rejected without a prompt. |
+| 7 | **Operator approval** | Remaining REQUIRE_APPROVAL decisions surface in the CLI prompt or the VS Code webview. |
 
-The result: the firewall stays out of your way for the 95% of routine work, and only interrupts when there is something genuinely worth your eyes.
+The pipeline stays silent for the majority of routine work and surfaces a prompt only when an action genuinely warrants operator review.
 
 ## Quickstart
 
@@ -110,7 +110,7 @@ guard run  "echo hello"                         # > ALLOW, executes
 guard run  "rm ./tmp.txt"                       # > REQUIRE_APPROVAL, prompts y/N
 guard run  "rm -rf ./build" --dryrun            # > Docker sandbox: shows file diff, then asks
 
-# Obfuscation? Caught.
+# Obfuscated payloads are decoded before classification.
 guard eval 'echo "cm0gLXJmIC8=" | base64 -d | sh'   # > CRITICAL, BLOCK, decoded as rm -rf /
 
 # SQL (analyze-only by default; never touches your DB)
@@ -178,7 +178,7 @@ source scripts/guard-shell-hook.sh   # wraps rm, mv, dd, chmod, chown
 
 ### Auto-mode AI tools (Claude Code, Cursor, Continue.dev, Zed)
 
-The flows above all require deliberate routing. That is not enough when an AI agent runs unattended in **auto-accept mode**, because the agent does not ask first.
+The integrations above require explicit routing through the firewall. When an AI agent runs unattended in **auto-accept mode**, actions are issued without operator review, so the firewall must intercept at the agent's own dispatch layer.
 
 #### Claude Code: PreToolUse hook (intercepts every Bash, Write, and Edit call)
 
@@ -229,9 +229,9 @@ After wrapping, every `tools/call` JSON-RPC request from the host runs through `
 
 ### VS Code extension
 
-After installing from the Marketplace, the extension auto-detects which AI tools you have configured (Claude Code via `~/.claude/settings.json`, every MCP-aware host via `guard mcp scan --json`) and offers a one-click toast to wire firewall protection into all of them. From then on, when an AI tries something risky, the existing approval webview pops up automatically; no manual invocation needed. *(new in v0.5.0)*
+On first activation the extension detects every AI tool configured on the host (Claude Code via `~/.claude/settings.json`, MCP-aware hosts via `guard mcp scan --json`) and offers a single notification to wire firewall protection into each of them. From that point, any agent action that hits REQUIRE_APPROVAL opens the approval webview automatically; no manual command invocation is required. *(new in v0.5.0)*
 
-The **Command Palette** (Ctrl+Shift+P) gives you these manual commands under `AI Firewall:`
+The Command Palette (Ctrl+Shift+P) exposes the following commands under `AI Firewall:`
 
 - **Detect & Wire AI Tools** / **Unwire All AI Tools** *(new in v0.5.0)*: re-arm or reverse the auto-wire flow.
 - **Show Status** *(new in v0.5.0)*: markdown summary of wired hosts plus the last 20 audit decisions.
@@ -243,7 +243,7 @@ The **Command Palette** (Ctrl+Shift+P) gives you these manual commands under `AI
 - **Scan Text for Secrets and PII...** / **Scan Selection for Secrets and PII** *(v0.4.0)*.
 - **Show Governance Status** / **Show Behavior Status** *(v0.4.0)*.
 
-Risky actions open a themed approval webview with the risk badge, intent and decision pills, findings list, git context, and a syntax-coloured unified diff. Smart-flow auto-approvals (memory or inheritance match) instead surface a quiet status-bar toast: no webview, no friction. See [vscode-extension/README.md](vscode-extension/README.md) for build, debug, and packaging instructions.
+Risky actions open a themed approval webview containing the risk badge, intent and decision pills, the findings list, the git context, and a syntax-coloured unified diff. Smart-flow auto-approvals (memory or inheritance match) instead surface a status-bar message and proceed without opening the webview. See [vscode-extension/README.md](vscode-extension/README.md) for build, debug, and packaging instructions.
 
 ## Pipeline
 
@@ -371,9 +371,9 @@ VS Code Marketplace publishing is currently manual. Re-build the `.vsix` (`npx v
 
 ## Security
 
-Found a way for an AI agent to bypass the firewall, a regex-DoS in a scanner, a prompt-injection that disables a check, or any other vulnerability? Please do not open a public issue. File it privately via [GitHub Security advisories](https://github.com/Shahriyar-Khan27/ai_firewall/security/advisories/new) so we can fix and disclose responsibly.
+If you discover a vulnerability (a bypass of the firewall, a regex-DoS in a scanner, a prompt-injection that disables a check, or similar), please do not open a public issue. File it privately via [GitHub Security advisories](https://github.com/Shahriyar-Khan27/ai_firewall/security/advisories/new) to allow responsible coordination of a fix and disclosure.
 
-For non-sensitive bugs and feature requests, the public issues tracker is the right place. See Contributing below.
+Non-sensitive bugs and feature requests belong on the public issues tracker; see Contributing below.
 
 ## Contributing
 
@@ -398,11 +398,9 @@ pytest -q       # confirm 457 tests pass
 # make your change, add a test, push a branch, open a PR
 ```
 
-Run `pytest` before opening a PR. CI will re-run on Python 3.11, 3.12, and 3.13. New features land with tests; we do not merge regressions.
+Run `pytest` before opening a PR. CI re-runs the suite on Python 3.11, 3.12, and 3.13. New features ship with tests; regressions block merge.
 
-**Bugs, questions, and feature requests:** open an issue at <https://github.com/Shahriyar-Khan27/ai_firewall/issues>. For security-relevant findings, see the Security section above.
-
-If you find this project useful, please consider starring the repo. It is the simplest signal that this kind of safety tooling matters and is worth maintaining.
+**Bugs, questions, and feature requests:** open an issue at <https://github.com/Shahriyar-Khan27/ai_firewall/issues>. For security findings, refer to the Security section above.
 
 ## Links
 
