@@ -2,6 +2,29 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.3.0] — 2026-05-01
+
+### Added
+
+- **Secret-DB watcher** — passive detection of writes to your editor's
+  `state.vscdb` (Code / Cursor on Windows / macOS / Linux). Surfaces a
+  one-shot info notification when an extension modifies the secret store,
+  plus a new command **AI Firewall: Show Recent Secret-DB Activity** that
+  opens a webview log of timestamped events. Detection-only — the firewall
+  doesn't patch fs.readFile or interfere with other extensions.
+- **Smart-flow status bar toasts** — when the firewall auto-approves an
+  action via *memory* (you've approved this kind of thing before in this
+  project) or *inheritance* (you just typed an equivalent command in your
+  own terminal), a quiet 4-second status-bar message surfaces what
+  happened. Replaces the webview prompt for routine work — fewer
+  interruptions.
+
+### Changed
+
+- Bumped to v0.3.0 to align with the Python package.
+- Extension now expects ai-execution-firewall ≥ 0.3.0 (smart-flow features
+  rely on the new `Decision.reason` strings: "memory match" / "inheritance").
+
 ## [0.2.1] — 2026-04-30
 
 ### Changed
