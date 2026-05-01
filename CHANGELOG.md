@@ -4,6 +4,22 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.5.1] — 2026-05-01
+
+Documentation-only patch release. No Python or extension code changes; the 457-test suite is unchanged from v0.5.0.
+
+### Changed
+
+- Both READMEs restructured to follow the conventions used by mature open-source security tools. The project root README opens with an HTML hero block (centred logo, title, tagline, badges), a metadata table, an "Example session" terminal trace, and a "What it catches" Threat / Outcome table, followed by Capabilities organised into four scannable groups (Detection and analysis, Enforcement and governance, Operator experience, Audit and integration). The VS Code extension README now follows the conventional `yo code` Marketplace ordering: Features, Quick start, Requirements, Useful commands, Extension settings, Example flow, Known issues, Release notes, Questions and contributions, Build from source, License.
+- The retired shields.io VS Marketplace badge endpoints (`visual-studio-marketplace/v` and `visual-studio-marketplace/i`, both confirmed returning 404 from `https://shields.io/badges/...`) are replaced with the working `vsmarketplacebadges.dev` equivalents. The Marketplace listing previously rendered them as the literal text "VS Marketplace retired badge".
+- The extension README's hero icon reference is now an absolute `https://raw.githubusercontent.com/.../vscode-extension/icon.png` URL. The previous relative `<img src="icon.png">` rendered as a broken-image placeholder on the Marketplace listing because the rendering context does not resolve relative paths.
+- Em dashes, first-person plural in prose, and AI-tell phrasing (`leverage`, `unleash`, `seamless`, `effortless`, `empower`, `Approval fatigue solved`, `No webview, no friction`, and similar) removed across both READMEs.
+
+### Added
+
+- Top-level `CONTRIBUTING.md` summarising contribution conventions and surfacing GitHub Security advisories as the disclosure channel for security-relevant findings. Mirrors the Contributing section in the project README.
+- Top-level `.mailmap` canonicalising author identity for `git shortlog -sne` and similar tools. GitHub's contributor widget reads commit metadata directly and ignores `.mailmap`, so this is local-side hygiene only.
+
 ## [0.5.0] — 2026-05-01
 
 The "active interceptor" release. Until now the VS Code extension was a

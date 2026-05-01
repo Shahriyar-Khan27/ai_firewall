@@ -2,6 +2,18 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.5.1] — 2026-05-01
+
+Documentation-only patch release. The extension's TypeScript source is unchanged from v0.5.0.
+
+### Changed
+
+- README rewritten to follow the conventional VS Code Marketplace structure used by mature extensions (Microsoft Python, GitLens, ESLint): Features, Quick start, Requirements, Useful commands, Extension settings, Example flow, Known issues, Release notes, Questions and contributions, Build from source, License.
+- Hero icon now references the absolute `https://raw.githubusercontent.com/.../vscode-extension/icon.png` URL. The previous relative `<img src="icon.png">` rendered as a broken-image placeholder on the Marketplace listing because the rendering context does not resolve relative paths.
+- VS Marketplace version and install badges replaced with the working `vsmarketplacebadges.dev` endpoints; the previous shields.io endpoints are retired and were rendering as the literal text "VS Marketplace retired badge".
+- Four scattered "What's new in vX.Y.Z" sections collapsed into a single Release notes section that defers to the project CHANGELOG for the full feature list.
+- Duplicate "Build from source" block removed; em dashes, first-person plural in prose, and AI-tell phrasing stripped throughout.
+
 ## [0.5.0] — 2026-05-01
 
 The "active interceptor" release. The extension goes from a
