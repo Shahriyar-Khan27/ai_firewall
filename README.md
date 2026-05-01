@@ -85,6 +85,58 @@ print(result.decision.decision, result.execution.exit_code)
 source scripts/guard-shell-hook.sh   # wraps rm, mv, dd, chmod, chown
 ```
 
+### Auto-mode AI tools (Claude Code, Cursor, Continue.dev, Zed)
+
+The flows above (CLI / SDK / shell hook / VS Code) all require the user to deliberately route an action through the firewall. That's not enough when an AI agent is running in **auto-accept mode** — the agent doesn't ask first.
+
+Two zero-touch integrations close that gap:
+
+#### Claude Code — PreToolUse hook (intercepts **every** Bash / Write / Edit / MultiEdit call)
+
+The hook fires before Claude Code executes any tool, even when run with `--dangerously-skip-permissions`. If the firewall says BLOCK or REQUIRE_APPROVAL, the tool call is refused and the AI gets the reason back.
+
+Add to your `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+      "hooks": [{
+        "type": "command",
+        "command": "python /absolute/path/to/ai_firewall/scripts/claude-code-pretooluse.py"
+      }]
+    }]
+  }
+}
+```
+
+A copyable example lives at [examples/claude-code-settings.json](examples/claude-code-settings.json). Tunable via env var:
+
+- `AI_FIREWALL_HOOK_APPROVAL=block` (default) — anything REQUIRE_APPROVAL is rejected.
+- `AI_FIREWALL_HOOK_APPROVAL=allow` — REQUIRE_APPROVAL passes through (use sparingly).
+
+#### MCP server — works with any MCP-capable host (Claude Code, Cursor, Continue.dev, Zed, Cline, ...)
+
+```bash
+pip install "ai-execution-firewall[mcp]"
+```
+
+Add to your MCP host config (e.g. `.claude/mcp.json` or your client's equivalent):
+
+```json
+{
+  "mcpServers": {
+    "ai-firewall": {
+      "command": "guard",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The server exposes tools like `firewall_run_shell`, `firewall_run_sql`, `firewall_run_api`, and `firewall_run_file`. Configure the AI to prefer these over its built-in tools, and every action goes through the policy pipeline. REQUIRE_APPROVAL defaults to a refusal (safe for auto-mode); the AI gets the Decision JSON back so it can adjust or surface to the user.
+
 ### VS Code extension
 
 After installing from the Marketplace, the **Command Palette** (Ctrl+Shift+P) gives you six commands under `AI Firewall:`

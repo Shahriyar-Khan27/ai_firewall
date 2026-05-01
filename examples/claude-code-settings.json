@@ -1,0 +1,19 @@
+{
+  "//": "Drop-in Claude Code settings for the AI Execution Firewall PreToolUse hook.",
+  "//": "Copy the `hooks` block into your ~/.claude/settings.json (or project-level .claude/settings.json).",
+  "//": "Update the `command` path to point at your local checkout of claude-code-pretooluse.py.",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/<you>/path/to/ai_firewall/scripts/claude-code-pretooluse.py"
+          }
+        ]
+      }
+    ]
+  }
+}

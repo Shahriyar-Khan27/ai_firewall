@@ -4,6 +4,27 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.2.0] — 2026-04-30
+
+The "auto-mode" release. The firewall now intercepts AI agents that execute on their own — not just users who deliberately route commands through it.
+
+### Added
+
+- **Claude Code `PreToolUse` hook** ([scripts/claude-code-pretooluse.py](scripts/claude-code-pretooluse.py)). Reads Claude Code's tool-call JSON on stdin, evaluates the action through `Guard`, and refuses anything BLOCK or REQUIRE_APPROVAL by exiting 2 with a structured reason. Works in auto-accept / `--dangerously-skip-permissions` mode because Claude Code hooks always fire. Covers `Bash`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`.
+- **MCP server** ([ai_firewall/mcp_server.py](ai_firewall/mcp_server.py)). FastMCP-based server exposing `firewall_run_shell`, `firewall_run_sql`, `firewall_run_api`, `firewall_run_file`, `firewall_evaluate_shell`, `firewall_show_policy`. Launch with `guard mcp` (stdio transport). Wire into any MCP host (Claude Code, Cursor, Continue.dev, Zed, Cline) so the AI's actions route through the firewall instead of its built-in tools.
+- **`guard mcp` CLI subcommand** to launch the MCP server.
+- **`mcp` optional install extra**: `pip install "ai-execution-firewall[mcp]"`.
+- **23 new tests** (9 covering the hook script via subprocess, 14 covering the MCP tool functions). Total: 182 passing.
+
+### Why this matters
+
+Until now, the firewall only saw actions you deliberately wrapped (`guard run …`, the SDK, the VS Code command palette). That's the wrong threat model for AI tools running unattended in auto-mode. v0.2.0 adds the two integration paths that catch unattended agent actions before they execute:
+
+- The **Claude Code hook** is the most direct — it intercepts Claude Code's own tools without needing the AI to use anything different. Drop it into `settings.json` and you're done.
+- The **MCP server** is the broader, vendor-neutral path. Any MCP-aware AI tool can be configured to prefer our wrapped tools over its built-ins.
+
+Both default to **safer-than-not**: `REQUIRE_APPROVAL` is treated as a block, so an unattended agent can't silently coerce its way to execution.
+
 ## [0.1.1] — 2026-04-30
 
 ### Changed

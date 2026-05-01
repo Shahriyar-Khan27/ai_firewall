@@ -153,6 +153,27 @@ def sql(
 
 
 @cli.command()
+def mcp() -> None:
+    """Launch the MCP server over stdio.
+
+    Wire this up in your MCP host config (Claude Code, Cursor, Continue, ...) so
+    the AI's shell / file / SQL / HTTP actions route through the firewall:
+
+        {"mcpServers": {"ai-firewall": {"command": "guard", "args": ["mcp"]}}}
+    """
+    try:
+        from ai_firewall.mcp_server import main as run_server
+    except ImportError:
+        typer.secho(
+            "MCP server requires the `mcp` package: pip install 'ai-execution-firewall[mcp]'",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    run_server()
+
+
+@cli.command()
 def api(
     method: str = typer.Argument(..., help="HTTP method: GET, POST, PUT, PATCH, DELETE, ..."),
     url: str = typer.Argument(..., help="Target URL."),
