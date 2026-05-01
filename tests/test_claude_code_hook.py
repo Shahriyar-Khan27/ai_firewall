@@ -53,6 +53,21 @@ def test_hook_allows_require_approval_when_env_set():
     assert proc.returncode == 0
 
 
+def test_hook_prompt_mode_falls_back_to_block_when_no_extension():
+    """`AI_FIREWALL_HOOK_APPROVAL=prompt` with no port file → safe-default BLOCK.
+
+    The extension might be uninstalled or not yet activated; the hook must
+    not hang or accidentally allow risky actions.
+    """
+    proc = _run_hook(
+        {"tool_name": "Bash", "tool_input": {"command": "rm tmp.txt"}},
+        env={"AI_FIREWALL_HOOK_APPROVAL": "prompt"},
+    )
+    assert proc.returncode == 2
+    body = json.loads(proc.stderr.strip())
+    assert "requires approval" in body["reason"]
+
+
 def test_hook_passes_through_unknown_tool():
     proc = _run_hook({"tool_name": "Read", "tool_input": {"file_path": "/etc/hosts"}})
     assert proc.returncode == 0

@@ -20,6 +20,12 @@ Decisions:
 To override REQUIRE_APPROVAL behaviour, set env var:
   AI_FIREWALL_HOOK_APPROVAL=allow   → treat REQUIRE_APPROVAL as ALLOW
   AI_FIREWALL_HOOK_APPROVAL=block   → treat REQUIRE_APPROVAL as BLOCK (default)
+  AI_FIREWALL_HOOK_APPROVAL=prompt  → ask the user via the VS Code extension's
+                                       webview popup (loopback handshake on
+                                       127.0.0.1:<random>; falls back to BLOCK
+                                       when no extension is reachable). Set
+                                       automatically by the extension's
+                                       auto-wire toast on first activation.
 
 Wire up via your Claude Code settings.json (see examples/claude-code-settings.json):
 
@@ -91,7 +97,29 @@ def _flatten_edits(edits: Any) -> str:
 
 def _approval_mode() -> str:
     raw = os.environ.get("AI_FIREWALL_HOOK_APPROVAL", "block").strip().lower()
-    return raw if raw in {"allow", "block"} else "block"
+    return raw if raw in {"allow", "block", "prompt"} else "block"
+
+
+def _ask_extension(action, decision) -> bool | None:
+    """Round-trip the Decision to the VS Code extension's approval webview.
+
+    Returns True/False on a successful round-trip, None when no extension
+    is reachable (caller falls back to the safe default).
+    """
+    try:
+        from ai_firewall.approval.extension_bridge import (
+            discover_target,
+            make_extension_approval,
+        )
+    except ImportError:
+        return None
+    if discover_target() is None:
+        return None
+    fn = make_extension_approval()
+    try:
+        return bool(fn(action, decision))
+    except Exception:
+        return None
 
 
 def main() -> None:
@@ -134,8 +162,21 @@ def main() -> None:
         )
 
     if decision.decision == "REQUIRE_APPROVAL":
-        if _approval_mode() == "allow":
+        mode = _approval_mode()
+        if mode == "allow":
             sys.exit(0)
+        if mode == "prompt":
+            verdict = _ask_extension(action, decision)
+            if verdict is True:
+                sys.exit(0)  # user approved in the extension webview
+            if verdict is False:
+                _emit_block(
+                    f"AI Execution Firewall: user rejected via extension "
+                    f"({decision.risk.name}): {decision.reason}",
+                    decision=decision.to_dict(),
+                )
+            # verdict is None — extension unreachable, fall through to
+            # safe-default BLOCK below.
         findings = list(decision.impact.code_findings)[:3]
         findings_str = f"; findings: {findings}" if findings else ""
         _emit_block(

@@ -253,11 +253,39 @@ def mcp_server() -> None:
 @mcp_app.command("scan")
 def mcp_scan(
     workspace: Optional[Path] = typer.Option(None, "--workspace", help="Project root to scan in addition to global configs."),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON (used by the VS Code extension's auto-wire detector)."),
 ):
     """List MCP servers configured in known host configs (Claude Code / Cursor / Continue)."""
     from ai_firewall.discovery.mcp_detector import discover_workspace_paths, scan
     extra = discover_workspace_paths(workspace) if workspace else None
     entries = scan(extra_paths=extra)
+
+    if json_output:
+        # Also surface whether the Claude Code PreToolUse hook is installed,
+        # so the extension can decide whether to offer to wire it.
+        claude_hook_installed = _claude_code_hook_installed()
+        payload = {
+            "mcp_servers": [
+                {
+                    "host": e.host,
+                    "name": e.name,
+                    "config_path": str(e.config_path),
+                    "wrapped": bool(e.wrapped),
+                    "command": e.command,
+                    "args": list(e.args or []),
+                    "upstream_command": e.upstream_command,
+                    "upstream_args": list(e.upstream_args or []),
+                }
+                for e in entries
+            ],
+            "claude_code_hook": {
+                "settings_path": str(_claude_code_settings_path()),
+                "installed": claude_hook_installed,
+            },
+        }
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
     if not entries:
         typer.echo("(no MCP servers found in known configs)")
         return
@@ -266,6 +294,38 @@ def mcp_scan(
         typer.echo(f"{marker:12} {e.host:12} {e.name:25} {e.config_path}")
         if e.wrapped and e.upstream_command:
             typer.echo(f"             upstream: {e.upstream_command} {' '.join(e.upstream_args)}")
+
+
+def _claude_code_settings_path() -> Path:
+    """Return the conventional location of Claude Code's settings.json.
+
+    Used by `guard mcp scan --json` (extension auto-detect) and by the
+    forthcoming `guard mcp install-hook` / `uninstall-hook` commands.
+    """
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _claude_code_hook_installed(settings_path: Path | None = None) -> bool:
+    """True if a PreToolUse hook in settings.json points at our script.
+
+    We don't require an exact path match — any hook entry whose `command`
+    contains `claude-code-pretooluse` is treated as ours.
+    """
+    path = settings_path or _claude_code_settings_path()
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    hooks = (((data.get("hooks") or {}).get("PreToolUse")) or [])
+    for entry in hooks:
+        if not isinstance(entry, dict):
+            continue
+        for h in (entry.get("hooks") or []):
+            if isinstance(h, dict) and "claude-code-pretooluse" in str(h.get("command", "")):
+                return True
+    return False
 
 
 @mcp_app.command("install")
@@ -330,6 +390,137 @@ def mcp_uninstall(
     servers[name] = spec
     write_servers(e.config_path, servers)
     typer.echo(f"unwrapped '{name}' in {e.config_path}")
+
+
+@mcp_app.command("install-hook")
+def mcp_install_hook(
+    settings_path: Optional[Path] = typer.Option(None, "--settings", help="Path to Claude Code settings.json. Default: ~/.claude/settings.json."),
+    approval_mode: str = typer.Option("prompt", "--approval-mode", help="REQUIRE_APPROVAL behaviour: 'prompt' (extension webview), 'block' (safe default), or 'allow'."),
+):
+    """Install the Claude Code PreToolUse hook in settings.json.
+
+    Idempotent: if a hook pointing at our script is already present, this
+    only updates the approval-mode env var. No backup is made; the change
+    is an atomic rename via a temp file.
+    """
+    path = Path(settings_path) if settings_path else _claude_code_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            typer.secho(f"refusing to overwrite — {path} is not valid JSON", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=1)
+    else:
+        data = {}
+
+    hook_command = _claude_code_hook_command()
+    hooks_root = data.setdefault("hooks", {})
+    pre = hooks_root.setdefault("PreToolUse", [])
+
+    # Remove any existing entries pointing at our script (we re-install with current settings).
+    cleaned = []
+    for entry in pre:
+        if not isinstance(entry, dict):
+            cleaned.append(entry)
+            continue
+        keep = True
+        for h in entry.get("hooks") or []:
+            if isinstance(h, dict) and "claude-code-pretooluse" in str(h.get("command", "")):
+                keep = False
+                break
+        if keep:
+            cleaned.append(entry)
+    cleaned.append({
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [{
+            "type": "command",
+            "command": hook_command,
+            "env": {"AI_FIREWALL_HOOK_APPROVAL": approval_mode},
+        }],
+    })
+    hooks_root["PreToolUse"] = cleaned
+
+    _atomic_write_json(path, data)
+    typer.echo(f"installed Claude Code hook in {path} (approval={approval_mode})")
+
+
+@mcp_app.command("uninstall-hook")
+def mcp_uninstall_hook(
+    settings_path: Optional[Path] = typer.Option(None, "--settings"),
+):
+    """Remove the Claude Code PreToolUse hook entry our extension installed."""
+    path = Path(settings_path) if settings_path else _claude_code_settings_path()
+    if not path.exists():
+        typer.echo(f"nothing to uninstall — {path} does not exist")
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        typer.secho(f"refusing to edit — {path} is not valid JSON", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+
+    hooks_root = data.get("hooks") or {}
+    pre = hooks_root.get("PreToolUse") or []
+    cleaned = []
+    removed = 0
+    for entry in pre:
+        if not isinstance(entry, dict):
+            cleaned.append(entry)
+            continue
+        kept_hooks = []
+        for h in entry.get("hooks") or []:
+            if isinstance(h, dict) and "claude-code-pretooluse" in str(h.get("command", "")):
+                removed += 1
+                continue
+            kept_hooks.append(h)
+        if kept_hooks:
+            entry["hooks"] = kept_hooks
+            cleaned.append(entry)
+        # else: this entry only contained our hook — drop it entirely
+    if removed == 0:
+        typer.echo("no AI Firewall hook entry to remove")
+        return
+    if cleaned:
+        hooks_root["PreToolUse"] = cleaned
+    else:
+        hooks_root.pop("PreToolUse", None)
+    if not hooks_root:
+        data.pop("hooks", None)
+    else:
+        data["hooks"] = hooks_root
+
+    _atomic_write_json(path, data)
+    typer.echo(f"removed {removed} AI Firewall hook entry from {path}")
+
+
+def _claude_code_hook_command() -> str:
+    """Construct the hook command line the extension installs.
+
+    Uses the current Python interpreter (so it works inside virtualenvs)
+    and the absolute path of `scripts/claude-code-pretooluse.py` from this
+    package install. When the script lives in a development checkout, we
+    prefer the package-relative path.
+    """
+    # Walk up from this file to find scripts/claude-code-pretooluse.py
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        candidate = parent / "scripts" / "claude-code-pretooluse.py"
+        if candidate.exists():
+            return f'"{sys.executable}" "{candidate}"'
+    # Fallback: assume `guard` itself is on PATH (binary distributions)
+    # and provide a stub command — user can override via --settings edit.
+    return f'"{sys.executable}" -m ai_firewall.scripts.claude_code_pretooluse'
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Write `data` as pretty-printed JSON via a temp file + rename.
+
+    Same pattern as `mcp_detector.write_servers`.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 @cli.command(name="mcp-proxy", help="(Internal) stdio proxy that routes MCP traffic through the firewall.")
