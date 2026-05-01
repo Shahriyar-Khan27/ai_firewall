@@ -26,7 +26,7 @@ AI coding agents (Claude Code, Cursor, Copilot, Continue, Cline, Zed) increasing
 | **Languages** | Python (CLI, library); TypeScript (VS Code extension) |
 | **Distributions** | PyPI · VS Code Marketplace · standalone PyInstaller binaries (Linux, macOS, macOS-arm64, Windows) |
 | **Compatibility** | Claude Code, Cursor, Continue, Cline, Zed, and any MCP-aware host |
-| **Test suite** | 457 tests, CI matrix on Python 3.11 / 3.12 / 3.13 |
+| **Test suite** | 457 tests, CI matrix on Python 3.10 / 3.11 / 3.12 / 3.13 / 3.14 |
 
 ## Example session
 

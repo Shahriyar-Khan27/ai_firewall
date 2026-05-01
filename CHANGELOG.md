@@ -4,6 +4,26 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.5.2] — 2026-05-01
+
+Compatibility patch release. Lowers the supported Python floor from 3.11 to 3.10 and extends the CI matrix to also cover 3.14. Same source code on every Python; the version-specific stdlib differences are absorbed by two small polyfills.
+
+### Changed
+
+- `requires-python = ">=3.10"` (was `>=3.11`). Python 3.10 is supported until October 2026 and is still the system Python on a number of long-term-support distributions; targeting it widens the user base without dragging in EOL Python.
+- New `Programming Language :: Python :: 3.10` and `Programming Language :: Python :: 3.14` classifiers.
+- CI matrix expanded to `["3.10", "3.11", "3.12", "3.13", "3.14"]`.
+
+### Added (internal)
+
+- Conditional dependency `tomli>=2.0; python_version<"3.11"`. The PyPI backport of `tomllib`. On Python 3.11 and later the stdlib `tomllib` is used directly with no extra dependency.
+- `tomllib` import in `ai_firewall/config/guard_toml.py` is now version-gated. On 3.10 it falls back to `import tomli as tomllib`. The fallback exposes the same `loads` and `load` API, so the rest of the module is version-agnostic.
+- `StrEnum` import in `ai_firewall/core/action.py` is now version-gated. On 3.10 it polyfills with the documented `class StrEnum(str, Enum)` pattern, which is exactly what 3.11's `enum.StrEnum` is internally. `IntentType` instances continue to compare equal to their string values across all supported versions.
+
+### Tests
+
+- Suite still 457 passing on Python 3.11 with the polyfills active. The 3.10, 3.12, 3.13, and 3.14 matrix rows will exercise the polyfill branches in CI.
+
 ## [0.5.1] — 2026-05-01
 
 Documentation-only patch release. No Python or extension code changes; the 457-test suite is unchanged from v0.5.0.

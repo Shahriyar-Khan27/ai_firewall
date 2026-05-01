@@ -16,7 +16,7 @@ Thanks for considering a contribution to AI Execution Firewall. The project is f
    ```bash
    pytest -q
    ```
-   CI re-runs on Python 3.11, 3.12, and 3.13.
+   CI re-runs on Python 3.10, 3.11, 3.12, 3.13, and 3.14.
 4. **Commit message style.** Concise subject (70 characters or less), then a body explaining *why* the change is needed, not what the diff already shows. Avoid commit messages that just restate the file list.
 5. **No unrelated formatting churn.** If your editor reformats a file you did not otherwise change, please revert before staging.
 
@@ -60,7 +60,7 @@ Be kind, assume good faith, and keep discussion focused on the work. Nobody owes
 
 Pushing a tag that matches `v*` automatically triggers the GitHub Actions release pipeline:
 
-1. Runs the full test matrix on Python 3.11, 3.12, and 3.13.
+1. Runs the full test matrix on Python 3.10, 3.11, 3.12, 3.13, and 3.14.
 2. Builds sdist plus wheel.
 3. Publishes to PyPI via Trusted Publishing (no API token stored in CI).
 4. Builds standalone PyInstaller binaries for Linux, macOS, macOS-arm64, and Windows, and attaches them to the GitHub release.

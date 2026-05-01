@@ -26,9 +26,18 @@ from __future__ import annotations
 
 import fnmatch
 import os
-import tomllib
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# tomllib is stdlib in Python 3.11+. On 3.10 we fall back to the
+# tomli PyPI backport (declared as a conditional dependency in
+# pyproject.toml). The fallback exposes the same loads / load API,
+# so the rest of this file is version-agnostic.
+if sys.version_info >= (3, 11):
+    import tomllib  # type: ignore[import-not-found]
+else:  # pragma: no cover - exercised only on 3.10
+    import tomli as tomllib  # type: ignore[import-not-found, no-redef]
 
 
 @dataclass(frozen=True)

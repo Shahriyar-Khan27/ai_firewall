@@ -2,6 +2,10 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.5.2] — 2026-05-01
+
+Version-tracking patch. The extension's TypeScript source is unchanged from v0.5.1. The bump tracks the Python package's v0.5.2, which lowers the supported Python floor to 3.10 and extends the CI matrix to cover 3.10 through 3.14. The extension shells out to the `guard` CLI, so the broader compatibility surface helps users on long-term-support Linux distributions and corporate Windows images that still ship Python 3.10 by default.
+
 ## [0.5.1] — 2026-05-01
 
 Documentation-only patch release. The extension's TypeScript source is unchanged from v0.5.0.

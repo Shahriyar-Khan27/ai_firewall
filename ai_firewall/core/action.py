@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from dataclasses import dataclass, field
-from enum import IntEnum, StrEnum
+from enum import IntEnum
 from typing import Any
+
+# StrEnum landed in Python 3.11 stdlib. On 3.10 we polyfill with the
+# documented (str, Enum) pattern, which is exactly what 3.11's
+# StrEnum is internally. Both produce instances that compare equal
+# to their str value (e.g. IntentType.FILE_DELETE == "FILE_DELETE").
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:  # pragma: no cover - exercised only on 3.10
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """Backport of enum.StrEnum (Python 3.11+)."""
+
+        def __str__(self) -> str:
+            return self.value
 
 
 class IntentType(StrEnum):
