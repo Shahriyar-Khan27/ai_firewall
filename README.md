@@ -1,24 +1,34 @@
-<div align="center">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Shahriyar-Khan27/ai_firewall/main/assets/logo.png" alt="AI Execution Firewall" width="120" height="120" />
+</p>
 
-<img src="https://raw.githubusercontent.com/Shahriyar-Khan27/ai_firewall/main/assets/logo.png" alt="AI Execution Firewall" width="120" height="120" />
+<h1 align="center">AI Execution Firewall</h1>
 
-# AI Execution Firewall
+<p align="center"><strong>A deterministic policy gate for every action an AI agent executes.</strong></p>
 
-### A deterministic policy gate for every action an AI agent executes.
+<p align="center">
+  <a href="https://pypi.org/project/ai-execution-firewall/"><img src="https://img.shields.io/pypi/v/ai-execution-firewall.svg" alt="PyPI"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall"><img src="https://vsmarketplacebadges.dev/version-short/sk-dev-ai.ai-execution-firewall.png?label=VS%20Marketplace" alt="VS Marketplace"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Shahriyar-Khan27/ai_firewall/actions/workflows/ci.yml"><img src="https://github.com/Shahriyar-Khan27/ai_firewall/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Shahriyar-Khan27/ai_firewall/stargazers"><img src="https://img.shields.io/github/stars/Shahriyar-Khan27/ai_firewall?style=social" alt="GitHub stars"></a>
+</p>
 
-Inspect, classify, and approve every shell command, file edit, SQL query, and HTTP request before it reaches the operating system. Risky actions raise an in-editor approval prompt; routine ones pass silently.
+---
 
-[![PyPI](https://img.shields.io/pypi/v/ai-execution-firewall.svg)](https://pypi.org/project/ai-execution-firewall/)
-[![VS Marketplace](https://vsmarketplacebadges.dev/version-short/sk-dev-ai.ai-execution-firewall.png?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=sk-dev-ai.ai-execution-firewall)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/Shahriyar-Khan27/ai_firewall/actions/workflows/ci.yml/badge.svg)](https://github.com/Shahriyar-Khan27/ai_firewall/actions/workflows/ci.yml)
-[![GitHub stars](https://img.shields.io/github/stars/Shahriyar-Khan27/ai_firewall?style=social)](https://github.com/Shahriyar-Khan27/ai_firewall/stargazers)
+## Overview
 
-</div>
+AI coding agents (Claude Code, Cursor, Copilot, Continue, Cline, Zed) increasingly execute commands, edit files, and call APIs without operator review. AI Execution Firewall sits between those agents and the host system and enforces a deterministic policy on every action. Every request is classified, scored for risk, simulated for impact, and matched against YAML rules before it can run. Risky actions either block outright, or open an approval surface (CLI prompt or VS Code webview) containing the diff, the findings, and explicit Approve and Reject controls.
 
-AI coding agents (Claude Code, Cursor, Copilot, Continue, Cline, Zed) increasingly execute commands, edit files, and call APIs without operator review. AI Execution Firewall sits between those agents and the host system and enforces a deterministic policy on every action. Every request is classified, scored for risk, simulated for impact, and matched against YAML rules before it can run. Risky actions either block, or open an approval surface (CLI prompt or VS Code webview) showing the diff, the findings, and explicit Approve / Reject controls.
+| | |
+|---|---|
+| **License** | MIT |
+| **Languages** | Python (CLI, library); TypeScript (VS Code extension) |
+| **Distributions** | PyPI · VS Code Marketplace · standalone PyInstaller binaries (Linux, macOS, macOS-arm64, Windows) |
+| **Compatibility** | Claude Code, Cursor, Continue, Cline, Zed, and any MCP-aware host |
+| **Test suite** | 457 tests, CI matrix on Python 3.11 / 3.12 / 3.13 |
 
-Open source under the MIT license. 457 passing tests. Compatible with Claude Code, Cursor, Continue, Cline, Zed, and any MCP-aware host.
+## Example session
 
 ```text
 $ guard run "pip install requets"
@@ -47,13 +57,45 @@ $ guard run "rm -rf ./build"           # action issued by an AI agent in auto-mo
 | AI agent emits an AWS access key in a request body, log entry, or pasted text. | Detected by the secret scanner; surfaced before the request leaves the host. |
 | AI agent attempts to delete an unfamiliar build directory. | Approval webview opens with the unified diff and impact summary. Operator decision is recorded in memory; future identical actions auto-approve. |
 
+## How it works
+
 ```
 AI > Action > Firewall > Decision > Execution
 ```
 
-The firewall classifies intent, scores risk, applies YAML rules, simulates impact (unified diff for code, SQL AST findings, git context, SSRF and leaked-secret detection for URLs), and returns one of `ALLOW`, `BLOCK`, or `REQUIRE_APPROVAL`. Every decision is appended to an audit log.
+Each `guard.execute(action)` call passes through a deterministic pipeline: intent classification, risk scoring, YAML policy evaluation, impact simulation (unified diff for code, SQL AST analysis, git context, SSRF and leaked-secret detection for URLs), and a final decision of `ALLOW`, `BLOCK`, or `REQUIRE_APPROVAL`. Every evaluated action is appended to a JSONL audit log and, when configured, broadcast to one or more SIEM sinks. Full pipeline detail is documented in the [Pipeline](#pipeline) section.
 
-> **Capabilities.** Semantic command parsing with obfuscation decoding; approved-pattern memory; permission inheritance from the host shell history; HMAC-signed audit trails; Docker sandbox dry-run; MCP transparent proxy; AI-SBOM validation against PyPI, npm, crates.io, and RubyGems; DLP for secrets and PII; network egress control; fine-grained RBAC via guard.toml; rule-based behaviour anomaly detection; SIEM-ready audit sinks; rate limiting, loop detection, and a daily API-byte budget; automatic detection and integration of Claude Code, Cursor, Continue, Cline, and Zed. Full release notes in [CHANGELOG.md](CHANGELOG.md).
+## Capabilities
+
+**Detection and analysis**
+
+- Semantic command parsing (bashlex AST) with base64, hex, and printf obfuscation decoding.
+- SQL parsing via `sqlglot`; HTTP and URL parsing for SSRF, cloud-metadata, and credential leakage detection.
+- AI-SBOM validation against the PyPI, npm, crates.io, and RubyGems registries with Damerau-Levenshtein typosquat detection against the top-100 packages.
+- Secret scanning (AWS, GitHub, Slack, Stripe, Google, Anthropic, OpenAI, PEM keys, JWTs) and PII scanning (email, US SSN, Luhn-validated credit cards, E.164 / US phone, IBAN, high-entropy tokens).
+- Rule-based behaviour anomaly detection over the audit log: rate burst, last-hour rate spike vs 24-hour median, and quiet-hour outliers.
+
+**Enforcement and governance**
+
+- YAML-driven policy engine producing `ALLOW`, `BLOCK`, or `REQUIRE_APPROVAL` decisions.
+- Fine-grained RBAC via `guard.toml` with role inheritance and intent / file-glob / MCP-tool allow-deny lists.
+- Rate limiting per intent, loop detection on identical commands, and a daily API-byte budget.
+- Network egress control covering `curl`, `wget`, `httpie`, `nc`, `socat`, `telnet`, `scp`, and `rsync`.
+
+**Operator experience**
+
+- Approved-pattern memory and permission inheritance from the host shell history reduce repeat prompts.
+- Docker sandbox dry-run replays destructive shell commands in a disposable container before any host change.
+- Approval webview in the VS Code extension surfaces risk badges, findings, git context, and a syntax-coloured unified diff.
+- Automatic detection and integration of Claude Code, Cursor, Continue, Cline, and Zed via a single notification on first activation.
+
+**Audit and integration**
+
+- HMAC-SHA256-signed JSONL audit trails with `guard audit verify` and `guard audit show --json`.
+- SIEM-ready audit sinks for syslog, Splunk HEC, generic HTTPS webhooks, and stdout (for `vector` or `fluent-bit`), all asynchronous with bounded queues.
+- MCP transparent proxy for any MCP-aware host, with auto-detection (`guard mcp scan`) and one-command installation (`guard mcp install <server>`).
+
+Full release-by-release detail is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 
