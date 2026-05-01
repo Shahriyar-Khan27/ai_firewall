@@ -2,6 +2,16 @@
 
 All notable changes to the **AI Execution Firewall** VS Code extension.
 
+## [0.4.1] — 2026-05-01
+
+### Changed
+
+- Bumped to v0.4.1 to track the Python package. The extension itself
+  is unchanged; the underlying `guard scan` CLI now reads from stdin
+  when called with `-` or no positional argument, which makes the
+  **Scan Text…** input box flow more reliable for very long pastes
+  on Windows (no more shell quoting edge cases when guard is invoked).
+
 ## [0.4.0] — 2026-05-01
 
 ### Added

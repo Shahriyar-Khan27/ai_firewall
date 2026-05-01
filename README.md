@@ -105,7 +105,7 @@ guard run "npm install @types/nodde"            # → BLOCK · not found on npm
 
 # AI-native DLP (new in v0.4.0) — paste-time scan for leaked secrets / PII
 guard scan "my SSN is 123-45-6789"              # → CRITICAL · finding "PII: US SSN"
-guard scan --json "$(cat ./prompt.txt)"
+cat ./prompt.txt | guard scan -                 # stdin form (new in v0.4.1) — multi-line, quote-free
 
 # Network egress control (new in v0.4.0)
 guard run "curl http://169.254.169.254/"        # → CRITICAL (cloud metadata SSRF)
@@ -308,7 +308,7 @@ api_destructive:
 pytest -q
 ```
 
-428 tests + 1 skipped (Docker round-trip skips when no daemon). CI runs the full suite on Python 3.11 / 3.12 / 3.13 on every push, plus PyInstaller binary builds on tag push.
+433 tests + 1 skipped (Docker round-trip skips when no daemon). CI runs the full suite on Python 3.11 / 3.12 / 3.13 on every push, plus PyInstaller binary builds on tag push.
 
 ## Release flow
 

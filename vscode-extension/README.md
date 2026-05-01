@@ -17,6 +17,10 @@ VS Code command  →  guard eval  →  Decision  →  webview prompt  →  guard
 
 The extension never re-implements policy logic — it surfaces what the Python `guard` CLI returns.
 
+## What's new in v0.4.1
+
+Patch release tracking the Python CLI. The extension itself is unchanged, but the underlying `guard scan` now reads from stdin when called with `-` or no positional argument — which makes the **Scan Text for Secrets and PII…** input-box flow more robust for very long pastes on Windows (no more PowerShell quoting edge cases on multi-line content).
+
 ## What's new in v0.4.0
 
 The "enterprise round" of the underlying firewall — seven additions that move it from "useful CLI" to "deployable in a regulated org" — surface in the extension as four new Command Palette entries:

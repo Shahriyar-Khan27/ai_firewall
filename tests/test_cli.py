@@ -127,6 +127,43 @@ def test_api_evaluate_only_outputs_decision(tmp_path: Path):
     assert payload["decision"] == "ALLOW"
 
 
+def test_scan_argument_clean():
+    result = runner.invoke(cli, ["scan", "nothing to see here", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["findings"] == []
+
+
+def test_scan_argument_finds_ssn():
+    result = runner.invoke(cli, ["scan", "my SSN is 123-45-6789", "--json"])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert any("SSN" in f for f in payload["findings"])
+    assert payload["severity"] == "critical"
+
+
+def test_scan_reads_from_stdin_when_dash():
+    """v0.4.1: `guard scan -` reads the text from stdin."""
+    result = runner.invoke(cli, ["scan", "-", "--json"], input="leak: AKIAIOSFODNN7EXAMPLE\n")
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert any("AWS" in f or "aws" in f.lower() for f in payload["findings"])
+
+
+def test_scan_reads_from_stdin_when_no_arg():
+    """v0.4.1: `guard scan` (no arg) also reads stdin."""
+    result = runner.invoke(cli, ["scan", "--json"], input="boring text\n")
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["findings"] == []
+
+
+def test_scan_empty_input_errors():
+    """No arg, empty stdin → exit 2 with helpful message."""
+    result = runner.invoke(cli, ["scan", "--json"], input="")
+    assert result.exit_code == 2, result.output
+
+
 def test_api_metadata_endpoint_high_severity():
     result = runner.invoke(
         cli, ["api", "GET", "http://169.254.169.254/latest/meta-data/", "--evaluate-only"]

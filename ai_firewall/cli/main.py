@@ -104,7 +104,7 @@ def eval(
 
 @cli.command()
 def scan(
-    text: str = typer.Argument(..., help="Text to scan for leaked secrets and PII."),
+    text: Optional[str] = typer.Argument(None, help="Text to scan. Pass `-` (or omit) to read from stdin — handy for piping multi-line content (`cat prompt.txt | guard scan -`) without quoting hell."),
     json_output: bool = typer.Option(False, "--json", help="Emit findings as JSON instead of human-readable lines."),
 ):
     """Scan text for leaked secrets and PII (emails, SSNs, credit cards, IBANs, …).
@@ -113,6 +113,12 @@ def scan(
     Exits 0 on clean / minor; exits 1 on major / critical.
     """
     from ai_firewall.engine import pii_scan, secret_scan
+
+    if text is None or text == "-":
+        text = sys.stdin.read()
+    if not text:
+        typer.secho("scan: no input (pass text as an argument or pipe via stdin).", fg=typer.colors.YELLOW, err=True)
+        raise typer.Exit(code=2)
 
     sec = secret_scan.scan(text)
     pii = pii_scan.scan(text)

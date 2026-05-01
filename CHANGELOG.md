@@ -4,6 +4,25 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.4.1] — 2026-05-01
+
+### Changed
+
+- **`guard scan` reads stdin** when called with `-` or no positional
+  argument. The 0.4.0 form `guard scan "<text>"` still works, but
+  `cat ./prompt.txt | guard scan -` and `echo $env:CLIPBOARD | guard scan`
+  are now the ergonomic path for multi-line content (chat messages,
+  error logs, code snippets) — no more fighting Windows PowerShell's
+  quoting rules. Empty stdin exits 2 with a helpful message.
+- `.gitignore` now ignores `*.tmp.*` so an editor that crashes
+  mid-rename (which leaves files like `guard.py.tmp.<pid>.<ts>` behind)
+  doesn't pollute `git status`.
+
+### Tests
+
+- 428 → 433 (5 new for the `guard scan` argument / stdin / empty-input
+  behaviours).
+
 ## [0.4.0] — 2026-05-01
 
 The "enterprise round" release. v0.3.x made the firewall pleasant for one

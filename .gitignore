@@ -30,6 +30,9 @@ vscode-extension/.vscode-test/
 *.swp
 .DS_Store
 Thumbs.db
+# Atomic-write scratch files left behind when an editor process crashes
+# mid-rename (Windows VS Code, JetBrains, etc.). Glob deliberately broad.
+*.tmp.*
 
 # --- Runtime artifacts ---
 # Audit logs are runtime data, not source.
