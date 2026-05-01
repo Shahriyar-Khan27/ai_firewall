@@ -137,24 +137,7 @@ The extension is open source under the MIT license alongside the Python firewall
 - **Security findings**: please use [GitHub Security advisories](https://github.com/Shahriyar-Khan27/ai_firewall/security/advisories/new) rather than the public issues tracker.
 - **Source for build, debug, and packaging instructions**: see [vscode-extension/](https://github.com/Shahriyar-Khan27/ai_firewall/tree/main/vscode-extension) and the project README's Release flow section.
 
-Areas where contributions are most welcome: new host detectors (Aider, Cline, Zed), approval webview polish (diff rendering, accessibility, keyboard shortcuts), and translations of webview copy.
-
-## Build from source
-
-```bash
-git clone https://github.com/Shahriyar-Khan27/ai_firewall.git
-cd ai_firewall/vscode-extension
-npm install
-npm run compile
-```
-
-Open the `vscode-extension/` folder in VS Code and press **F5** to launch an Extension Development Host with the local build.
-
-To produce an installable `.vsix`:
-
-```bash
-npx vsce package --no-yarn
-```
+Areas where contributions are most welcome: new host detectors (Aider, Cline, Zed), approval webview polish (diff rendering, accessibility, keyboard shortcuts), and translations of webview copy. Build, debug, and packaging steps are documented in the project's [CONTRIBUTING.md](https://github.com/Shahriyar-Khan27/ai_firewall/blob/main/CONTRIBUTING.md).
 
 ## License
 
