@@ -70,29 +70,81 @@ def _action_for_tool(tool_name: str, tool_input: dict[str, Any]):
             return None
         return Action.shell(cmd)
 
-    if tool_name in {"Write", "Edit", "MultiEdit", "NotebookEdit"}:
+    if tool_name == "Write":
         path = tool_input.get("file_path") or tool_input.get("path")
         if not path:
             return None
-        # For Edit / MultiEdit we don't get the full proposed content easily;
-        # use the new_string / edits field as a best-effort body sample.
-        content = (
-            tool_input.get("content")
-            or tool_input.get("new_string")
-            or _flatten_edits(tool_input.get("edits"))
-            or ""
+        return Action.file("write", path, content=tool_input.get("content") or "")
+
+    if tool_name in {"Edit", "MultiEdit"}:
+        path = tool_input.get("file_path") or tool_input.get("path")
+        if not path:
+            return None
+        proposed = _reconstruct_edit_content(tool_name, path, tool_input)
+        return Action.file("write", path, content=proposed)
+
+    if tool_name == "NotebookEdit":
+        path = tool_input.get("file_path") or tool_input.get("path")
+        if not path:
+            return None
+        # Notebooks are JSON; the impact engine cannot reconstruct cell-level
+        # edits accurately. Use the new_source as a best-effort delta.
+        return Action.file(
+            "write", path,
+            content=tool_input.get("new_source") or tool_input.get("new_string") or "",
         )
-        return Action.file("write", path, content=content)
 
     return None  # pass-through for tools we don't gate
 
 
-def _flatten_edits(edits: Any) -> str:
-    if not isinstance(edits, list):
-        return ""
-    return "\n".join(
-        str(e.get("new_string") or "") for e in edits if isinstance(e, dict)
-    )
+def _reconstruct_edit_content(tool_name: str, path: str, tool_input: dict[str, Any]) -> str:
+    """Apply Edit / MultiEdit substitutions on top of the current file.
+
+    Returns what the file *would* look like after the AI's tool call lands.
+    The impact engine then diffs that against the on-disk file and computes
+    findings (removed functions, removed sensitive identifiers, syntax
+    errors, and so on) accurately. Without this reconstruction the engine
+    sees `new_string` as if it were the entire new file, which makes every
+    targeted edit look like a near-total deletion.
+
+    Fallback rules:
+
+    - File not readable as UTF-8 text: treat current content as empty.
+      The proposed content is then just the new substitutions, which
+      over-approximates risk (the engine sees a brand-new file). Better
+      safe than missing a finding.
+    - `old_string` not present in current content: append the new content
+      as a best-effort delta. If the AI's edit cannot actually apply,
+      Claude Code itself will reject the call before execution.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            current = fh.read()
+    except (OSError, UnicodeDecodeError):
+        current = ""
+
+    if tool_name == "Edit":
+        old_s = tool_input.get("old_string") or ""
+        new_s = tool_input.get("new_string") or ""
+        if old_s and old_s in current:
+            return current.replace(old_s, new_s, 1)
+        if new_s:
+            return current + ("\n" + new_s if current else new_s)
+        return current
+
+    # MultiEdit: apply each substitution in order.
+    proposed = current
+    for edit in tool_input.get("edits") or []:
+        if not isinstance(edit, dict):
+            continue
+        o = edit.get("old_string") or ""
+        n = edit.get("new_string") or ""
+        if o and o in proposed:
+            proposed = proposed.replace(o, n, 1)
+        elif n:
+            proposed = proposed + ("\n" + n if proposed else n)
+    return proposed
+
 
 
 def _approval_mode() -> str:

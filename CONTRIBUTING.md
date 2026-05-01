@@ -11,7 +11,7 @@ Thanks for considering a contribution to AI Execution Firewall. The project is f
 ## Pull request conventions
 
 1. **One concern per PR.** A bug fix and a refactor in the same PR is harder to review and harder to revert.
-2. **Add a test.** New features land with a test in `tests/`. Bug fixes land with a regression test that fails before the patch and passes after. The test suite (currently 457 tests) must stay green on every push.
+2. **Add a test.** New features land with a test in `tests/`. Bug fixes land with a regression test that fails before the patch and passes after. The test suite (currently 460 tests) must stay green on every push.
 3. **Run the suite locally before pushing.**
    ```bash
    pytest -q

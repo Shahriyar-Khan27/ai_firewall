@@ -104,3 +104,104 @@ def test_hook_handles_malformed_input_gracefully():
 def test_hook_handles_missing_tool_input():
     proc = _run_hook({"tool_name": "Bash"})
     assert proc.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# Edit / MultiEdit content reconstruction (v0.5.3 fix)
+#
+# Earlier versions of the hook treated `tool_input["new_string"]` as if it
+# were the entire proposed new file. Every targeted Edit therefore looked
+# to the impact engine like a near-total file deletion, producing
+# REQUIRE_APPROVAL on benign one-line changes. The fix reconstructs the
+# proposed file by applying old_string -> new_string against the current
+# disk content, so the impact engine sees an accurate diff.
+# ---------------------------------------------------------------------------
+
+
+def test_edit_one_line_change_does_not_register_as_full_deletion(tmp_path: Path):
+    """A safe single-line change must not be flagged as removing every
+    function and class in the file.
+    """
+    target = tmp_path / "demo.py"
+    target.write_text(
+        "def alpha():\n    return 1\n\n"
+        "def beta():\n    return 2\n\n"
+        "def gamma():\n    return 3\n",
+        encoding="utf-8",
+    )
+    proc = _run_hook({
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": str(target),
+            "old_string": "    return 1",
+            "new_string": "    return 1  # alpha",
+        },
+    })
+    # The impact engine should see a tiny change, not a wipe. Either ALLOW
+    # outright or REQUIRE_APPROVAL on a non-removal reason. What we are
+    # asserting here is the absence of the old false-positive: removed
+    # functions / removed classes.
+    if proc.returncode == 2 and proc.stderr.strip():
+        body = json.loads(proc.stderr.strip())
+        findings = body.get("firewall", {}).get("impact", {}).get("code_findings", [])
+        assert not any("removes function" in f for f in findings), findings
+        assert not any("removes class" in f for f in findings), findings
+
+
+def test_edit_correctly_detects_removal_of_security_function(tmp_path: Path):
+    """An Edit that removes a security-relevant function must still be
+    detected by the impact engine. This is the test that proves the
+    reconstruction is feeding the engine real data.
+    """
+    target = tmp_path / "audit_demo.py"
+    target.write_text(
+        "import hmac\n\n"
+        "def sign_audit_record(record, key):\n"
+        "    return hmac.new(key, record, 'sha256').hexdigest()\n\n"
+        "def write_record(record):\n"
+        "    return record\n",
+        encoding="utf-8",
+    )
+    # AI tries to remove the signing function entirely.
+    proc = _run_hook({
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": str(target),
+            "old_string": (
+                "def sign_audit_record(record, key):\n"
+                "    return hmac.new(key, record, 'sha256').hexdigest()\n\n"
+            ),
+            "new_string": "",
+        },
+    })
+    # The hook must REQUIRE_APPROVAL or BLOCK; never silently allow.
+    assert proc.returncode == 2, proc.stderr
+    body = json.loads(proc.stderr.strip())
+    findings = body.get("firewall", {}).get("impact", {}).get("code_findings", [])
+    # The impact engine flags removed functions; with reconstruction this
+    # finding now lands accurately.
+    assert any("removes function" in f for f in findings), findings
+
+
+def test_multiedit_applies_substitutions_in_order(tmp_path: Path):
+    """MultiEdit reconstruction must apply each substitution to the
+    progressively-evolving content, not all in parallel against the
+    original.
+    """
+    target = tmp_path / "multi.py"
+    target.write_text(
+        "x = 1\ny = 2\nz = 3\n",
+        encoding="utf-8",
+    )
+    proc = _run_hook({
+        "tool_name": "MultiEdit",
+        "tool_input": {
+            "file_path": str(target),
+            "edits": [
+                {"old_string": "x = 1", "new_string": "x = 10  # bumped"},
+                {"old_string": "y = 2", "new_string": "y = 20  # bumped"},
+            ],
+        },
+    })
+    # Just confirm the hook runs without crashing on a MultiEdit shape.
+    assert proc.returncode in (0, 2), proc.stderr

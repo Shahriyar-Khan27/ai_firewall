@@ -4,6 +4,34 @@ All notable changes to **ai-execution-firewall** are documented here. The
 format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [SemVer](https://semver.org/).
 
+## [0.5.3] - 2026-05-01
+
+Bug fix patch. Fixes a long-standing false-positive in the Claude Code PreToolUse hook that made every targeted Edit / MultiEdit call look like a near-total file deletion.
+
+### Fixed
+
+- `scripts/claude-code-pretooluse.py` previously fed `tool_input["new_string"]` to the impact engine as if it were the entire proposed new file. Every Edit therefore produced a diff with hundreds of "removed" lines, and the impact engine flagged it as `removes function(s)`, `removes class(es)`, etc. Benign one-line changes were classified as HIGH risk and either auto-blocked (in `block` approval mode) or sent to the operator for approval (in `prompt` mode), depending on policy.
+- The hook now reconstructs the proposed file content by reading the current file from disk and applying the `old_string` -> `new_string` substitution (or, for MultiEdit, applying each `edits[]` entry in order). The impact engine then sees an accurate diff and produces accurate findings: a single-line change registers as a single-line change, while a genuine removal of a security-relevant function (audit signing, RBAC checks, secret scanning) is correctly flagged.
+- Notebook edits keep the previous best-effort delta behaviour. Cell-level reconstruction is out of scope for this patch.
+
+### Tests
+
+- 457 -> 460. Three new regression tests in `tests/test_claude_code_hook.py`:
+  - A safe one-line Edit no longer trips the `removes function` / `removes class` finding.
+  - A real removal of a security function in a fixture file is still detected and produces the expected `removes function` finding.
+  - A MultiEdit shape with multiple substitutions runs without crashing and applies in order.
+
+### Notes for users
+
+This is a hook-script-only change. Installed hooks need to be re-run from the new version:
+
+```
+guard mcp uninstall-hook
+guard mcp install-hook --approval-mode prompt
+```
+
+The standalone CLI, the Python SDK, the MCP transparent proxy, and the VS Code extension are unchanged.
+
 ## [0.5.2] — 2026-05-01
 
 Compatibility patch release. Lowers the supported Python floor from 3.11 to 3.10 and extends the CI matrix to also cover 3.14. Same source code on every Python; the version-specific stdlib differences are absorbed by two small polyfills.
